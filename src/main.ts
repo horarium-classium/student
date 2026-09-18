@@ -1,8 +1,6 @@
-import { getDayName, getTodayLessons, loadSchedules } from "./schedule";
+import { invoke } from "@tauri-apps/api/core";
+import { getDayName, getTodayLessons, loadSchedules, schedule } from "./schedule";
 import { notify } from "./notifications";
-import { createScheduler } from "./scheduler";
-
-const scheduler = createScheduler(() => getTodayLessons());
 
 const dayNameElement = document.querySelector<HTMLElement>("#day-name");
 const scheduleListElement = document.querySelector<HTMLElement>("#schedule-list");
@@ -118,7 +116,7 @@ window.setInterval(updateCurrentTime, 60_000);
 void loadSchedules()
   .then(() => {
     renderSchedule();
-    scheduler.start();
+    return invoke("update_schedule", { schedule });
   })
   .catch(showScheduleError);
 notificationButton?.addEventListener("click", () => void testNotification());

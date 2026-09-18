@@ -1,7 +1,6 @@
 import type { Lesson, Schedule } from "./types";
 
-export const scheduleUrl =
-  "https://gist.githubusercontent.com/armenbadal/d384e13e190a1d6ff9fb9a1f89205ae0/raw/ac061fe83c5a04e178dc106f57bebfd202619e54/horarium-classium.json";
+export const scheduleUrl = "https://gist.githubusercontent.com/armenbadal/d384e13e190a1d6ff9fb9a1f89205ae0/raw/horarium-classium.json";
 
 export const dayNames: Record<number, string> = {
   1: "Երկուշաբթի",
