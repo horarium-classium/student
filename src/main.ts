@@ -1,11 +1,21 @@
+import { lessonSummary } from "./summary";
 import { invoke } from "@tauri-apps/api/core";
 import { getDayName, getTodayLessons, loadSchedules, schedule } from "./schedule";
+import { initializeTray } from "./tray";
+import { initializeSettings } from "./settings";
 import { notify } from "./notifications";
 
 const dayNameElement = document.querySelector<HTMLElement>("#day-name");
 const scheduleListElement = document.querySelector<HTMLElement>("#schedule-list");
 const currentTimeElement = document.querySelector<HTMLTimeElement>("#current-time");
 const notificationButton = document.querySelector<HTMLButtonElement>("#notification-test");
+const refreshButton = document.querySelector<HTMLButtonElement>("#refresh");
+let loading = false;
+let hasSchedule = false;
+let renderedDay = "";
+const summaryElement = document.querySelector<HTMLElement>("#lesson-summary");
+const sourceElement = document.querySelector<HTMLElement>("#schedule-source");
+
 const statusElement = document.querySelector<HTMLElement>("#status");
 
 function updateCurrentTime(): void {
@@ -18,6 +28,10 @@ function updateCurrentTime(): void {
     minute: "2-digit",
     hour12: false,
   });
+  if (hasSchedule) {
+    if (renderedDay !== now.toDateString()) renderSchedule();
+    if (summaryElement) summaryElement.textContent = lessonSummary(getTodayLessons(now), now);
+  }
   updateCurrentLesson(now);
 }
 
@@ -63,8 +77,20 @@ function renderSchedule(): void {
 
   const today = new Date();
   const lessons = getTodayLessons(today);
+  renderedDay = today.toDateString();
+  if (summaryElement) {
+    summaryElement.hidden = lessons.length === 0;
+    summaryElement.textContent = lessonSummary(lessons, today);
+  }
   dayNameElement.textContent = getDayName(today.getDay() === 0 ? 7 : today.getDay());
 
+  if (lessons.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-day";
+    empty.textContent = "Այսօր դասեր չկան։";
+    scheduleListElement.replaceChildren(empty);
+    return;
+  }
   const table = document.createElement("table");
   table.className = "schedule-table";
   table.innerHTML = "<thead><tr><th scope=\"col\">Ժամը</th><th scope=\"col\">Դաս</th></tr></thead>";
@@ -111,12 +137,46 @@ async function testNotification(): Promise<void> {
 }
 
 updateCurrentTime();
-window.setInterval(updateCurrentTime, 60_000);
+window.setInterval(updateCurrentTime, 15_000);
 
-void loadSchedules()
-  .then(() => {
+export async function refreshSchedule(): Promise<void> {
+  if (loading) return;
+  loading = true;
+  if (refreshButton) refreshButton.disabled = true;
+  if (statusElement) statusElement.textContent = "Բեռնվում է…";
+  try {
+    const result = await loadSchedules(!hasSchedule);
+    hasSchedule = true;
     renderSchedule();
-    return invoke("update_schedule", { schedule });
-  })
-  .catch(showScheduleError);
+    if (sourceElement) {
+      sourceElement.dataset.source = result.source;
+      sourceElement.textContent = result.source === "cached" ? "Աղբյուր՝ պահված տարբերակ" :
+        `Աղբյուր՝ առցանց · Թարմացված է՝ ${new Date(result.updatedAt!).toLocaleTimeString("hy-AM", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
+    }
+    try {
+      await invoke("update_schedule", { schedule });
+      if (statusElement) statusElement.textContent = result.warning ?? "";
+    } catch (error) {
+      if (statusElement) statusElement.textContent = `Դասացուցակը ցուցադրված է, բայց հիշեցումները չեն թարմացվել։ ${String(error)}`;
+    }
+  } catch (error) {
+    if (!hasSchedule) {
+      showScheduleError(error);
+      if (sourceElement) {
+        sourceElement.dataset.source = "error";
+        sourceElement.textContent = "Աղբյուր՝ սխալ";
+      }
+    }
+    if (statusElement) statusElement.textContent = `${hasSchedule ? "Թարմացումը չհաջողվեց։ Գործող դասացուցակը պահպանված է։" : "Դասացուցակը հասանելի չէ։ Ստուգեք կապը և կրկին փորձեք։"} ${String(error)}`;
+  } finally {
+    loading = false;
+    if (refreshButton) refreshButton.disabled = false;
+  }
+}
+
+void initializeTray(refreshSchedule)
+  .catch((error) => console.error("Tray listeners:", error))
+  .then(initializeSettings)
+  .then(refreshSchedule);
+refreshButton?.addEventListener("click", () => void refreshSchedule());
 notificationButton?.addEventListener("click", () => void testNotification());

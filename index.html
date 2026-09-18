@@ -2,6 +2,7 @@
 <html lang="hy">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/src/assets/horarium.svg" />
     <link rel="stylesheet" href="/src/style.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Դասացուցակ</title>
@@ -11,14 +12,33 @@
   <body>
     <main class="container">
       <header class="page-header">
-        <div class="brand-mark" aria-hidden="true">Դ</div>
+        <img class="brand-mark" src="/src/assets/horarium.svg" alt="" aria-hidden="true" />
         <div class="header-copy">
           <p class="eyebrow">HORARIUM CLASSIUM</p>
           <h1 id="day-name">Բեռնվում է…</h1>
         </div>
         <span class="live-indicator"><span></span><time id="current-time">--:--</time></span>
       </header>
+      <div class="toolbar"><button id="refresh" type="button">Թարմացնել</button></div>
+      <p id="schedule-source" class="source" aria-live="polite"></p>
+      <p id="status" role="status" aria-live="polite"></p>
+      <p id="lesson-summary" class="lesson-summary" aria-live="polite" hidden></p>
       <div id="schedule-list" class="schedule-list"></div>
+      <details id="settings-panel" class="settings-panel">
+        <summary>Կարգավորումներ</summary>
+        <fieldset id="settings-fields" disabled>
+          <legend class="visually-hidden">Ծրագրի կարգավորումներ</legend>
+          <label><input type="checkbox" name="notificationsEnabled" /> Ծանուցումներ</label>
+          <label><input type="checkbox" name="soundEnabled" /> Ձայն</label>
+          <label><input type="checkbox" name="speechEnabled" /> Խոսք</label>
+          <label><input type="checkbox" name="autostartEnabled" /> Մուտք գործելիս գործարկել</label>
+          <label><input type="checkbox" name="startMinimized" /> Բացել tray-ում</label>
+          <p id="speech-hint" class="hint" role="status"></p>
+          <p class="hint">Tray-ում մեկնարկի փոփոխությունը գործում է հաջորդ գործարկումից։</p>
+        </fieldset>
+        <button type="button" id="bell-test">Փորձարկել զանգը</button>
+        <p id="settings-status" role="status" aria-live="polite"></p>
+      </details>
     </main>
   </body>
 </html>

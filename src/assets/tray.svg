@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 32 32">
+  <title>Horarium tray</title>
+  <defs>
+    <mask id="pages"><rect width="32" height="32" fill="white"/><path d="M16 14V27" stroke="black" stroke-width="1.5"/><circle cx="24" cy="9" r="8" fill="black"/></mask>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="#173D45"/>
+  <path d="M4 12Q10 10 16 14Q22 10 28 12V26Q22 24 16 28Q10 24 4 26Z" fill="#F6F1E7" mask="url(#pages)"/>
+  <g fill="none" stroke="#F6F1E7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="24" cy="9" r="5.5" stroke-width="2"/>
+    <path d="M24 6V9L26.5 10.5" stroke-width="1.7"/>
+  </g>
+</svg>

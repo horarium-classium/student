@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+
 export async function playBell(): Promise<void> {
-  return Promise.resolve();
+  await invoke("play_bell");
 }
