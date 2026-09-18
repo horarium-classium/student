@@ -41,22 +41,11 @@ h1 { margin: 0; font-family: Georgia, serif; font-size: 31px; font-weight: 600; 
   .schedule-table th:first-child, .schedule-table td:first-child { width: 116px; }
   .schedule-table th, .schedule-table td { padding: 12px 11px; }
 }
-button { border: 1px solid #bccfcb; border-radius: 8px; padding: 8px 12px; background: #f6faf9; color: #173d45; font: inherit; cursor: pointer; }
-button:disabled { opacity: .55; cursor: wait; }
-button:focus-visible, input:focus-visible { outline: 2px solid #28784f; outline-offset: 3px; }
-#status, #settings-status, .hint { font-size: 12px; line-height: 1.6; color: #496366; overflow-wrap: anywhere; }
-.settings-panel { width: min(440px, calc(100% - 28px)); max-height: calc(100vh - 40px); margin: auto; padding: 20px; overflow: auto; color: #172b36; border: 1px solid #ccdcd8; border-radius: 12px; background: #f5faf8; }
-.settings-panel::backdrop { background: rgba(23, 43, 54, .4); }
-.settings-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.settings-header h2 { margin: 0; font-size: 18px; }
-.settings-panel fieldset { border: 0; padding: 12px 0 0; margin: 0; }
-.settings-panel label { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; }
-.settings-panel input { accent-color: #28784f; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#status { font-size: 12px; line-height: 1.6; color: #496366; overflow-wrap: anywhere; }
 
 .source { margin: 10px 0 0; font-size: 11px; line-height: 1.6; color: #496366; }
 .source[data-source="cached"] { color: #875a26; }
 .source[data-source="error"] { color: #9a3939; }
 .lesson-summary { padding: 12px; border-left: 3px solid #3d9b6b; border-radius: 6px; background: #dceee4; font-size: 13px; line-height: 1.7; }
 .empty-day { padding: 22px 14px; text-align: center; font-size: 14px; }
-#status:empty, #settings-status:empty, #speech-hint:empty, #lesson-summary:empty, #schedule-source:empty { display: none; }
+#status:empty, #lesson-summary:empty, #schedule-source:empty { display: none; }

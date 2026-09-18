@@ -1,6 +1,7 @@
 use scheduler::{start_scheduler, update_schedule, SchedulerState};
 use std::{collections::HashMap, sync::Mutex};
 use tauri::{Manager, WindowEvent};
+use tauri_plugin_autostart::ManagerExt;
 
 mod audio;
 mod model;
@@ -42,7 +43,11 @@ pub fn run() {
                 eprintln!("Could not read settings, using defaults: {error}");
                 settings::Settings::default()
             });
-            let start_minimized = settings.start_minimized;
+            // Startup behavior is fixed, including for existing installations.
+            let autostart = app.autolaunch();
+            if let Err(error) = autostart.enable() {
+                eprintln!("Could not enable launch at login: {error}");
+            }
             app.manage(settings::SettingsState(Mutex::new(settings.clone())));
             start_scheduler(app.handle().clone());
             let tray_available = match tray::setup(app, &settings) {
@@ -52,7 +57,7 @@ pub fn run() {
                     false
                 }
             };
-            if !start_minimized || !tray_available {
+            if !tray_available {
                 if let Some(window) = app.get_webview_window("main") {
                     window.show()?;
                 }

@@ -6,12 +6,16 @@ use tauri::{
 };
 
 pub struct TrayState {
+    notifications: CheckMenuItem<tauri::Wry>,
     sound: CheckMenuItem<tauri::Wry>,
     speech: CheckMenuItem<tauri::Wry>,
 }
 
 pub fn sync(app: &AppHandle, settings: &Settings) {
     if let Some(tray) = app.try_state::<TrayState>() {
+        let _ = tray
+            .notifications
+            .set_checked(settings.notifications_enabled);
         let _ = tray.sound.set_checked(settings.sound_enabled);
         let _ = tray.speech.set_checked(settings.speech_enabled);
     }
@@ -44,7 +48,14 @@ pub fn setup(app: &App, settings: &Settings) -> tauri::Result<()> {
         settings.speech_enabled,
         None::<&str>,
     )?;
-    let settings_item = MenuItem::with_id(app, "settings", "Կարգավորումներ", true, None::<&str>)?;
+    let notifications = CheckMenuItem::with_id(
+        app,
+        "notifications",
+        "Ծանուցումներ",
+        true,
+        settings.notifications_enabled,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", "Ելք", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
@@ -53,10 +64,9 @@ pub fn setup(app: &App, settings: &Settings) -> tauri::Result<()> {
             &PredefinedMenuItem::separator(app)?,
             &refresh,
             &PredefinedMenuItem::separator(app)?,
+            &notifications,
             &sound,
             &speech,
-            &PredefinedMenuItem::separator(app)?,
-            &settings_item,
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
@@ -76,11 +86,7 @@ pub fn setup(app: &App, settings: &Settings) -> tauri::Result<()> {
             "refresh" => {
                 let _ = app.emit("refresh-schedule", ());
             }
-            "settings" => {
-                open(app);
-                let _ = app.emit("open-settings", ());
-            }
-            "sound" | "speech" => {
+            "notifications" | "sound" | "speech" => {
                 let current = app
                     .state::<SettingsState>()
                     .0
@@ -88,10 +94,11 @@ pub fn setup(app: &App, settings: &Settings) -> tauri::Result<()> {
                     .map(|value| value.clone())
                     .map_err(|error| error.to_string());
                 let result = current.and_then(|current| {
-                    let (key, enabled) = if event.id.as_ref() == "sound" {
-                        ("soundEnabled", !current.sound_enabled)
-                    } else {
-                        ("speechEnabled", !current.speech_enabled)
+                    let (key, enabled) = match event.id.as_ref() {
+                        "notifications" => ("notificationsEnabled", !current.notifications_enabled),
+                        "sound" => ("soundEnabled", !current.sound_enabled),
+                        "speech" => ("speechEnabled", !current.speech_enabled),
+                        _ => unreachable!(),
                     };
                     settings::set_setting(app.clone(), key.into(), enabled)
                 });
@@ -113,6 +120,10 @@ pub fn setup(app: &App, settings: &Settings) -> tauri::Result<()> {
             _ => {}
         })
         .build(app)?;
-    app.manage(TrayState { sound, speech });
+    app.manage(TrayState {
+        notifications,
+        sound,
+        speech,
+    });
     Ok(())
 }

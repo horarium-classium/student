@@ -2,7 +2,6 @@ use crate::storage::write_json;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, sync::Mutex};
 use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_autostart::ManagerExt;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(default, rename_all = "camelCase")]
@@ -10,8 +9,6 @@ pub struct Settings {
     pub notifications_enabled: bool,
     pub sound_enabled: bool,
     pub speech_enabled: bool,
-    pub autostart_enabled: bool,
-    pub start_minimized: bool,
 }
 
 impl Default for Settings {
@@ -20,8 +17,6 @@ impl Default for Settings {
             notifications_enabled: true,
             sound_enabled: true,
             speech_enabled: false,
-            autostart_enabled: false,
-            start_minimized: false,
         }
     }
 }
@@ -39,12 +34,11 @@ pub fn read(path: &Path) -> Result<Settings, String> {
 #[tauri::command]
 pub fn get_settings(app: AppHandle) -> Result<Settings, String> {
     let state = app.state::<SettingsState>();
-    let mut settings = state.0.lock().map_err(|error| error.to_string())?;
-    settings.autostart_enabled = app
-        .autolaunch()
-        .is_enabled()
-        .map_err(|error| error.to_string())?;
-    Ok(settings.clone())
+    let settings = state.0.lock().map_err(|error| error.to_string())?;
+    let updated = settings.clone();
+    drop(settings);
+    crate::tray::sync(&app, &updated);
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -56,8 +50,6 @@ pub fn set_setting(app: AppHandle, key: String, enabled: bool) -> Result<Setting
         "notificationsEnabled" => updated.notifications_enabled = enabled,
         "soundEnabled" => updated.sound_enabled = enabled,
         "speechEnabled" => updated.speech_enabled = enabled,
-        "autostartEnabled" => updated.autostart_enabled = enabled,
-        "startMinimized" => updated.start_minimized = enabled,
         _ => return Err(format!("Unknown setting: {key}")),
     }
     let path = app
@@ -65,52 +57,10 @@ pub fn set_setting(app: AppHandle, key: String, enabled: bool) -> Result<Setting
         .app_data_dir()
         .map_err(|error| error.to_string())?
         .join("settings.json");
-    let previous_autostart = if key == "autostartEnabled" {
-        Some(
-            app.autolaunch()
-                .is_enabled()
-                .map_err(|error| error.to_string())?,
-        )
-    } else {
-        None
-    };
-    let result = (|| -> Result<(), String> {
-        if previous_autostart.is_some() {
-            if enabled {
-                app.autolaunch().enable()
-            } else {
-                app.autolaunch().disable()
-            }
-            .map_err(|error| error.to_string())?;
-            updated.autostart_enabled = app
-                .autolaunch()
-                .is_enabled()
-                .map_err(|error| error.to_string())?;
-            if updated.autostart_enabled != enabled {
-                return Err("OS autostart state did not change.".into());
-            }
-        }
-        write_json(
-            &path,
-            &serde_json::to_string_pretty(&updated).map_err(|error| error.to_string())?,
-        )
-    })();
-    if let Err(error) = result {
-        if let Some(previous) = previous_autostart {
-            let rollback = if previous {
-                app.autolaunch().enable()
-            } else {
-                app.autolaunch().disable()
-            };
-            if let Err(rollback_error) = rollback {
-                return Err(format!(
-                    "{error}; autostart rollback failed: {rollback_error}"
-                ));
-            }
-            current.autostart_enabled = previous;
-        }
-        return Err(error);
-    }
+    write_json(
+        &path,
+        &serde_json::to_string_pretty(&updated).map_err(|error| error.to_string())?,
+    )?;
     *current = updated.clone();
     drop(current);
     crate::tray::sync(&app, &updated);
@@ -129,7 +79,6 @@ mod tests {
         assert_eq!(read(&path).unwrap(), Settings::default());
         let settings = Settings {
             sound_enabled: false,
-            start_minimized: true,
             ..Settings::default()
         };
         write_json(&path, &serde_json::to_string(&settings).unwrap()).unwrap();
@@ -140,13 +89,23 @@ mod tests {
     }
 
     #[test]
+    fn legacy_startup_preferences_are_ignored() {
+        let settings: Settings = serde_json::from_str(
+            r#"{"autostartEnabled":false,"startMinimized":false,"soundEnabled":false}"#,
+        )
+        .unwrap();
+        assert!(!settings.sound_enabled);
+        let saved = serde_json::to_value(settings).unwrap();
+        assert!(saved.get("autostartEnabled").is_none());
+        assert!(saved.get("startMinimized").is_none());
+    }
+
+    #[test]
     fn defaults_and_partial_settings_are_backwards_compatible() {
         let settings: Settings = serde_json::from_str("{\"soundEnabled\":false}").unwrap();
         assert!(!settings.sound_enabled);
         assert!(settings.notifications_enabled);
         assert!(!settings.speech_enabled);
-        assert!(!settings.autostart_enabled);
-        assert!(!settings.start_minimized);
         assert_eq!(
             serde_json::from_str::<Settings>(&serde_json::to_string(&settings).unwrap()).unwrap(),
             settings
