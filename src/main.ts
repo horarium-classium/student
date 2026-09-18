@@ -9,7 +9,6 @@ const dayNameElement = document.querySelector<HTMLElement>("#day-name");
 const scheduleListElement = document.querySelector<HTMLElement>("#schedule-list");
 const currentTimeElement = document.querySelector<HTMLTimeElement>("#current-time");
 const notificationButton = document.querySelector<HTMLButtonElement>("#notification-test");
-const refreshButton = document.querySelector<HTMLButtonElement>("#refresh");
 let loading = false;
 let hasSchedule = false;
 let renderedDay = "";
@@ -142,7 +141,6 @@ window.setInterval(updateCurrentTime, 15_000);
 export async function refreshSchedule(): Promise<void> {
   if (loading) return;
   loading = true;
-  if (refreshButton) refreshButton.disabled = true;
   if (statusElement) statusElement.textContent = "Բեռնվում է…";
   try {
     const result = await loadSchedules(!hasSchedule);
@@ -150,8 +148,7 @@ export async function refreshSchedule(): Promise<void> {
     renderSchedule();
     if (sourceElement) {
       sourceElement.dataset.source = result.source;
-      sourceElement.textContent = result.source === "cached" ? "Աղբյուր՝ պահված տարբերակ" :
-        `Աղբյուր՝ առցանց · Թարմացված է՝ ${new Date(result.updatedAt!).toLocaleTimeString("hy-AM", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
+      sourceElement.textContent = result.source === "cached" ? "Աղբյուր՝ պահված տարբերակ" : "";
     }
     try {
       await invoke("update_schedule", { schedule });
@@ -170,7 +167,6 @@ export async function refreshSchedule(): Promise<void> {
     if (statusElement) statusElement.textContent = `${hasSchedule ? "Թարմացումը չհաջողվեց։ Գործող դասացուցակը պահպանված է։" : "Դասացուցակը հասանելի չէ։ Ստուգեք կապը և կրկին փորձեք։"} ${String(error)}`;
   } finally {
     loading = false;
-    if (refreshButton) refreshButton.disabled = false;
   }
 }
 
@@ -178,5 +174,4 @@ void initializeTray(refreshSchedule)
   .catch((error) => console.error("Tray listeners:", error))
   .then(initializeSettings)
   .then(refreshSchedule);
-refreshButton?.addEventListener("click", () => void refreshSchedule());
 notificationButton?.addEventListener("click", () => void testNotification());

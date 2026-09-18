@@ -20,7 +20,7 @@ test("summary handles empty, upcoming, current, adjacent and finished lessons", 
   assert.equal(lessonSummary([...lessons].reverse(), at(8)), "Հաջորդ դասը՝ Մաթեմատիկա — 09:00");
   assert.equal(lessonSummary(lessons, at(9)), "Հիմա՝ Մաթեմատիկա · մինչև 10:00");
   assert.equal(lessonSummary(lessons, at(10)), "Հիմա՝ Ֆիզիկա · մինչև 11:00");
-  assert.equal(lessonSummary(lessons, at(11)), "Այսօրվա դասերն ավարտվել են։");
+  assert.equal(lessonSummary(lessons, at(11)), "");
 });
 
 test("speech is optional and safe without an Armenian voice or browser support", async (t) => {

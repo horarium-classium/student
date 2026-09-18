@@ -7,5 +7,5 @@ export function lessonSummary(lessons: Lesson[], now = new Date()): string {
   if (current) return `Հիմա՝ ${current.lesson} · մինչև ${current.end}`;
   const next = lessons.filter((lesson) => lesson.start > time).sort((a, b) => a.start.localeCompare(b.start))[0];
   if (next) return `Հաջորդ դասը՝ ${next.lesson} — ${next.start}`;
-  return "Այսօրվա դասերն ավարտվել են։";
+  return "";
 }
