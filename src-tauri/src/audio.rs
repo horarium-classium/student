@@ -8,7 +8,7 @@ use std::{
 use tauri::{AppHandle, Manager};
 
 static PLAYBACK: Mutex<()> = Mutex::new(());
-const BELL: &[u8] = include_bytes!("../assets/bell.wav");
+const BELL: &[u8] = include_bytes!("../assets/kakavik.wav");
 
 fn enabled(settings: &Settings) -> bool {
     settings.notifications_enabled && settings.sound_enabled

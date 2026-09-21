@@ -31,7 +31,6 @@ pub fn open(app: &AppHandle) {
 
 pub fn setup(app: &App, settings: &Settings) -> tauri::Result<()> {
     let open_item = MenuItem::with_id(app, "open", "Բացել", true, None::<&str>)?;
-    let refresh = MenuItem::with_id(app, "refresh", "Թարմացնել դասացուցակը", true, None::<&str>)?;
     let sound = CheckMenuItem::with_id(
         app,
         "sound",
@@ -62,8 +61,6 @@ pub fn setup(app: &App, settings: &Settings) -> tauri::Result<()> {
         &[
             &open_item,
             &PredefinedMenuItem::separator(app)?,
-            &refresh,
-            &PredefinedMenuItem::separator(app)?,
             &notifications,
             &sound,
             &speech,
@@ -83,9 +80,6 @@ pub fn setup(app: &App, settings: &Settings) -> tauri::Result<()> {
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => open(app),
-            "refresh" => {
-                let _ = app.emit("refresh-schedule", ());
-            }
             "notifications" | "sound" | "speech" => {
                 let current = app
                     .state::<SettingsState>()

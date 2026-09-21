@@ -74,7 +74,7 @@ export interface ScheduleLoadResult {
   warning?: string;
 }
 
-export async function loadSchedules(allowCache = true): Promise<ScheduleLoadResult> {
+export async function loadSchedules(): Promise<ScheduleLoadResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), scheduleTimeoutMs);
   let loadedSchedule: Schedule;
@@ -89,7 +89,6 @@ export async function loadSchedules(allowCache = true): Promise<ScheduleLoadResu
     }
     loadedSchedule = validateSchedule(await response.json());
   } catch (error) {
-    if (!allowCache) throw error;
     try {
       const cached = await invoke<string>("read_schedule_cache");
       if (cached !== null) {

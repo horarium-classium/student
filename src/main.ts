@@ -9,7 +9,6 @@ const dayNameElement = document.querySelector<HTMLElement>("#day-name");
 const scheduleListElement = document.querySelector<HTMLElement>("#schedule-list");
 const currentTimeElement = document.querySelector<HTMLTimeElement>("#current-time");
 const notificationButton = document.querySelector<HTMLButtonElement>("#notification-test");
-let loading = false;
 let hasSchedule = false;
 let renderedDay = "";
 const summaryElement = document.querySelector<HTMLElement>("#lesson-summary");
@@ -138,12 +137,10 @@ async function testNotification(): Promise<void> {
 updateCurrentTime();
 window.setInterval(updateCurrentTime, 15_000);
 
-export async function refreshSchedule(): Promise<void> {
-  if (loading) return;
-  loading = true;
+async function initializeSchedule(): Promise<void> {
   if (statusElement) statusElement.textContent = "Բեռնվում է…";
   try {
-    const result = await loadSchedules(!hasSchedule);
+    const result = await loadSchedules();
     hasSchedule = true;
     renderSchedule();
     if (sourceElement) {
@@ -157,21 +154,17 @@ export async function refreshSchedule(): Promise<void> {
       if (statusElement) statusElement.textContent = `Դասացուցակը ցուցադրված է, բայց հիշեցումները չեն թարմացվել։ ${String(error)}`;
     }
   } catch (error) {
-    if (!hasSchedule) {
-      showScheduleError(error);
-      if (sourceElement) {
-        sourceElement.dataset.source = "error";
-        sourceElement.textContent = "Աղբյուր՝ սխալ";
-      }
+    showScheduleError(error);
+    if (sourceElement) {
+      sourceElement.dataset.source = "error";
+      sourceElement.textContent = "Աղբյուր՝ սխալ";
     }
-    if (statusElement) statusElement.textContent = `${hasSchedule ? "Թարմացումը չհաջողվեց։ Գործող դասացուցակը պահպանված է։" : "Դասացուցակը հասանելի չէ։ Ստուգեք կապը և կրկին փորձեք։"} ${String(error)}`;
-  } finally {
-    loading = false;
+    if (statusElement) statusElement.textContent = `Դասացուցակը հասանելի չէ։ Ստուգեք կապը և վերագործարկեք ծրագիրը։ ${String(error)}`;
   }
 }
 
-void initializeTray(refreshSchedule)
+void initializeTray()
   .catch((error) => console.error("Tray listeners:", error))
   .then(initializeSettings)
-  .then(refreshSchedule);
+  .then(initializeSchedule);
 notificationButton?.addEventListener("click", () => void testNotification());

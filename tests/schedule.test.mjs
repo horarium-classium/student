@@ -160,19 +160,3 @@ test("unknown weekdays and missing fields identify the invalid location", async 
   assert.throws(() => validateSchedule({ Երկուշաբթի: [{ start: "09:00", lesson: "Դաս" }] }), /Invalid end for Երկուշաբթի, lesson 1/);
   assert.deepEqual(validateSchedule({}), {});
 });
-
-
-test("manual refresh preserves the active schedule on network or validation failure", async (t) => {
-  let saved;
-  mockStorage(t, { setItem: (_key, data) => { saved = data; }, getItem: () => { throw new Error("must not fall back during refresh"); } });
-  t.mock.method(globalThis, "fetch", async () => Response.json(timetable));
-  const module = await freshModule();
-  assert.equal((await module.loadSchedules()).source, "online");
-  globalThis.fetch = async () => Response.json({ Unknown: [] });
-  await assert.rejects(module.loadSchedules(false), /Unknown weekday/);
-  assert.deepEqual(module.schedule, timetable);
-  assert.deepEqual(JSON.parse(saved), timetable);
-  globalThis.fetch = async () => { throw new Error("offline"); };
-  await assert.rejects(module.loadSchedules(false), /offline/);
-  assert.deepEqual(module.schedule, timetable);
-});
