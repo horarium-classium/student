@@ -23,36 +23,72 @@ test("summary handles empty, upcoming, current, adjacent and finished lessons", 
   assert.equal(lessonSummary(lessons, at(11)), "");
 });
 
-test("speech is optional and safe without an Armenian voice or browser support", async (t) => {
-  const { speak, stopSpeech, hasArmenianVoice } = await load("speech");
+test("speech prefers Armenian, falls back to English and handles delayed voices", async (t) => {
+  const { speak, stopSpeech } = await load("speech");
   const oldWindow = globalThis.window;
   const oldUtterance = globalThis.SpeechSynthesisUtterance;
   t.after(() => {
+    stopSpeech();
     if (oldWindow === undefined) delete globalThis.window; else globalThis.window = oldWindow;
     if (oldUtterance === undefined) delete globalThis.SpeechSynthesisUtterance; else globalThis.SpeechSynthesisUtterance = oldUtterance;
   });
+  const message = { kind: "startingSoon", body: "1 րոպեից սկսվում է «Մաթեմատիկա» դասը։" };
   globalThis.window = {};
-  assert.equal(speak("Դաս", true), false);
+  assert.equal(speak(message, true), false);
   assert.doesNotThrow(stopSpeech);
-  let voices = [{ lang: "en-US" }];
+  let voices = [{ lang: "en-GB" }, { lang: "en-US" }];
   const spoken = [];
-  let cancelled = 0;
+  const events = new EventTarget();
   globalThis.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; } };
   window.speechSynthesis = {
     getVoices: () => voices,
-    cancel: () => { cancelled++; },
+    cancel: () => {},
     speak: (utterance) => spoken.push(utterance),
+    addEventListener: events.addEventListener.bind(events),
+    removeEventListener: events.removeEventListener.bind(events),
   };
-  assert.equal(hasArmenianVoice(), false);
-  assert.equal(speak("Դաս", true), false);
-  voices = [{ lang: "hy-AM" }];
-  assert.equal(hasArmenianVoice(), true);
-  assert.equal(speak("Դաս", false), false);
+  assert.equal(speak(message, false), false);
   assert.equal(spoken.length, 0);
-  assert.equal(speak("1 րոպեից սկսվում է դասը", true), true);
-  assert.equal(spoken[0].text, "Մեկ րոպեից սկսվում է դասը");
-  assert.equal(spoken[0].lang, "hy-AM");
-  assert.equal(cancelled, 1);
+  assert.equal(speak(message, true), true);
+  assert.equal(spoken.at(-1).text, "Your next lesson starts in one minute.");
+  assert.equal(spoken.at(-1).lang, "en-US");
+  for (const [kind, text] of [["started", "Your lesson has already started."], ["ended", "Your lesson has ended."]]) {
+    speak({ ...message, kind }, true);
+    assert.equal(spoken.at(-1).text, text);
+  }
+  voices.push({ lang: "hy-AM" });
+  speak(message, true);
+  assert.equal(spoken.at(-1).lang, "hy-AM");
+  assert.equal(spoken.at(-1).text, message.body.replace("1", "Մեկ"));
+  voices = [{ lang: "fr-FR" }];
+  const count = spoken.length;
+  assert.equal(speak(message, true), false);
+  assert.equal(spoken.length, count);
+  voices = [{ lang: "en-GB" }];
+  events.dispatchEvent(new Event("voiceschanged"));
+  assert.equal(spoken.length, count + 1);
+  events.dispatchEvent(new Event("voiceschanged"));
+  assert.equal(spoken.length, count + 1);
+  voices = [];
+  speak(message, true);
+  speak({ kind: "ended", body: "Դասն ավարտվեց։" }, true);
+  voices = [{ lang: "en-US" }];
+  events.dispatchEvent(new Event("voiceschanged"));
+  assert.equal(spoken.length, count + 2);
+  assert.equal(spoken.at(-1).text, "Your lesson has ended.");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  voices = [];
+  speak(message, true);
+  t.mock.timers.tick(5000);
+  voices = [{ lang: "en-US" }];
+  events.dispatchEvent(new Event("voiceschanged"));
+  assert.equal(spoken.length, count + 2);
+  voices = [];
+  speak(message, true);
+  stopSpeech();
+  voices = [{ lang: "hy" }];
+  events.dispatchEvent(new Event("voiceschanged"));
+  assert.equal(spoken.length, count + 2);
   window.speechSynthesis.speak = () => { throw new Error("unsupported"); };
-  assert.equal(speak("Դաս", true), false);
+  assert.equal(speak(message, true), false);
 });

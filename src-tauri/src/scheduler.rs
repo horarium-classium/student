@@ -35,6 +35,13 @@ fn schedule_time(value: &str, date: NaiveDate) -> Option<NaiveDateTime> {
         .map(|time| date.and_time(time))
 }
 
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SpeechNotification {
+    kind: &'static str,
+    body: String,
+}
+
 #[derive(Default)]
 struct Scheduler {
     last_check: Option<NaiveDateTime>,
@@ -42,7 +49,7 @@ struct Scheduler {
 }
 
 impl Scheduler {
-    fn tick(&mut self, schedule: &WeeklySchedule, now: NaiveDateTime) -> Vec<String> {
+    fn tick(&mut self, schedule: &WeeklySchedule, now: NaiveDateTime) -> Vec<SpeechNotification> {
         let previous = self.last_check.replace(now);
         let today = now.date();
         let tomorrow = today.succ_opt().unwrap_or(today);
@@ -84,10 +91,17 @@ impl Scheduler {
                     && now < end
                     && self.notified_events.insert(key(false))
                 {
-                    messages.push(if now >= start {
-                        format!("«{}» դասն արդեն սկսվել է։", lesson.lesson)
-                    } else {
-                        format!("1 րոպեից սկսվում է «{}» դասը։", lesson.lesson)
+                    messages.push(SpeechNotification {
+                        kind: if now >= start {
+                            "started"
+                        } else {
+                            "startingSoon"
+                        },
+                        body: if now >= start {
+                            format!("«{}» դասն արդեն սկսվել է։", lesson.lesson)
+                        } else {
+                            format!("1 րոպեից սկսվում է «{}» դասը։", lesson.lesson)
+                        },
                     });
                 }
                 // Catch up missed ends on the last observed day and today, including midnight.
@@ -96,7 +110,10 @@ impl Scheduler {
                     && self.notified_events.insert(key(true))
                 {
                     if date < today {
-                        messages.push(format!("«{}» դասը ավարտվեց ({})։", lesson.lesson, date));
+                        messages.push(SpeechNotification {
+                            kind: "ended",
+                            body: format!("«{}» դասը ավարտվեց ({})։", lesson.lesson, date),
+                        });
                         continue;
                     }
                     let next = lessons
@@ -109,7 +126,10 @@ impl Scheduler {
                     let next_text = next
                         .map(|(_, name)| format!(" Հաջորդը՝ «{}»։", name))
                         .unwrap_or_else(|| " Այլ դաս այսօր չկա։".to_string());
-                    messages.push(format!("«{}» դասը ավարտվեց։{}", lesson.lesson, next_text));
+                    messages.push(SpeechNotification {
+                        kind: "ended",
+                        body: format!("«{}» դասը ավարտվեց։{}", lesson.lesson, next_text),
+                    });
                 }
             }
         }
@@ -143,7 +163,7 @@ pub fn start_scheduler(app: AppHandle) {
                     .notification()
                     .builder()
                     .title("Դասացուցակ")
-                    .body(&message)
+                    .body(&message.body)
                     .show();
                 if settings.speech_enabled {
                     let _ = app.emit("speak-notification", &message);
@@ -186,11 +206,27 @@ mod tests {
     }
 
     #[test]
+    fn speech_payload_has_explicit_event_kind_and_armenian_body() {
+        let mut engine = Scheduler::default();
+        let soon = engine.tick(&schedule(), at(21, 8, 59));
+        let payload = serde_json::to_value(&soon[0]).unwrap();
+        assert_eq!(payload["kind"], "startingSoon");
+        assert_eq!(payload["body"], "1 րոպեից սկսվում է «Մաթեմատիկա» դասը։");
+        let messages = engine.tick(&schedule(), at(21, 10, 0));
+        assert_eq!(messages[0].kind, "ended");
+        assert_eq!(messages[1].kind, "started");
+    }
+
+    #[test]
     fn pre_alert_window_and_duplicate_suppression() {
         let mut engine = Scheduler::default();
         assert!(engine.tick(&schedule(), at(21, 8, 58)).is_empty());
         assert_eq!(
-            engine.tick(&schedule(), at(21, 8, 59)),
+            engine
+                .tick(&schedule(), at(21, 8, 59))
+                .iter()
+                .map(|m| m.body.as_str())
+                .collect::<Vec<_>>(),
             ["1 րոպեից սկսվում է «Մաթեմատիկա» դասը։"]
         );
         assert!(engine.tick(&schedule(), at(21, 9, 0)).is_empty());
@@ -201,7 +237,11 @@ mod tests {
     fn startup_mid_lesson_only_alerts_once() {
         let mut engine = Scheduler::default();
         assert_eq!(
-            engine.tick(&schedule(), at(21, 9, 30)),
+            engine
+                .tick(&schedule(), at(21, 9, 30))
+                .iter()
+                .map(|m| m.body.as_str())
+                .collect::<Vec<_>>(),
             ["«Մաթեմատիկա» դասն արդեն սկսվել է։"]
         );
         assert!(engine.tick(&schedule(), at(21, 9, 31)).is_empty());
@@ -213,8 +253,8 @@ mod tests {
         engine.tick(&schedule(), at(21, 8, 0));
         let messages = engine.tick(&schedule(), at(21, 10, 15));
         assert_eq!(messages.len(), 2);
-        assert!(messages[0].contains("ավարտվեց։ Հաջորդը՝ «Ֆիզիկա»"));
-        assert!(messages[1].contains("արդեն սկսվել է"));
+        assert!(messages[0].body.contains("ավարտվեց։ Հաջորդը՝ «Ֆիզիկա»"));
+        assert!(messages[1].body.contains("արդեն սկսվել է"));
         assert!(engine.tick(&schedule(), at(21, 10, 16)).is_empty());
         assert_eq!(engine.tick(&schedule(), at(21, 11, 0)).len(), 1);
         assert!(engine.tick(&schedule(), at(21, 11, 1)).is_empty());
@@ -264,7 +304,7 @@ mod tests {
         let messages = engine.tick(&schedule, at(21, 10, 0));
         assert!(messages
             .iter()
-            .any(|message| message.contains("Հաջորդը՝ «Ֆիզիկա»")));
+            .any(|message| message.body.contains("Հաջորդը՝ «Ֆիզիկա»")));
     }
 
     #[test]
@@ -273,7 +313,9 @@ mod tests {
         engine.tick(&schedule(), at(20, 23, 0));
         let messages = engine.tick(&schedule(), at(21, 11, 30));
         assert_eq!(messages.len(), 2);
-        assert!(messages.iter().all(|message| message.contains("ավարտվեց")));
+        assert!(messages
+            .iter()
+            .all(|message| message.body.contains("ավարտվեց")));
         assert!(engine.tick(&schedule(), at(21, 11, 31)).is_empty());
     }
     #[test]
@@ -291,7 +333,7 @@ mod tests {
         engine.tick(&schedule, at(21, 23, 30));
         let messages = engine.tick(&schedule, at(22, 0, 1));
         assert_eq!(messages.len(), 1);
-        assert!(messages[0].contains("2026-09-21"));
+        assert!(messages[0].body.contains("2026-09-21"));
         assert!(engine.notified_events.is_empty());
         assert!(engine.tick(&schedule, at(22, 0, 2)).is_empty());
     }

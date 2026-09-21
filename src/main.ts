@@ -127,7 +127,7 @@ function showScheduleError(error: unknown): void {
 async function testNotification(): Promise<void> {
   if (statusElement) statusElement.textContent = "Ծանուցումը ուղարկվում է…";
   try {
-    await notify("Դասացուցակ", "1 րոպեից սկսվում է «Մաթեմատիկա» դասը։");
+    await notify("Դասացուցակ", { kind: "startingSoon", body: "1 րոպեից սկսվում է «Մաթեմատիկա» դասը։" });
     if (statusElement) statusElement.textContent = "Ծանուցումը ուղարկվեց։";
   } catch (error) {
     console.error(error);
