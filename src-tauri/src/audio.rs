@@ -18,7 +18,9 @@ fn enabled(settings: &Settings) -> bool {
 // checked below; no general-purpose codec or external player is needed.
 fn bell_samples() -> Vec<f32> {
     BELL[44..]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|bytes| i16::from_le_bytes([bytes[0], bytes[1]]) as f32 / 32768.0)
         .collect()
 }
@@ -97,7 +99,9 @@ mod tests {
         assert_eq!(u16::from_le_bytes(BELL[20..22].try_into().unwrap()), 1);
         assert_eq!(u16::from_le_bytes(BELL[34..36].try_into().unwrap()), 16);
         let samples: Vec<i16> = BELL[44..]
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|bytes| i16::from_le_bytes([bytes[0], bytes[1]]))
             .collect();
         assert!(samples.iter().any(|sample| sample.abs() > 3000));
