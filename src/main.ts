@@ -10,10 +10,10 @@ import { notify } from "./notifications";
 
 const dayNameElement = document.querySelector<HTMLElement>("#day-name");
 const scheduleListElement = document.querySelector<HTMLElement>("#schedule-list");
-const currentTimeElement = document.querySelector<HTMLTimeElement>("#current-time");
 const notificationButton = document.querySelector<HTMLButtonElement>("#notification-test");
 let publication: Publication | null = null;
 let connection: Connection | null = null;
+let initializingConnection: Promise<Connection> | null = null;
 const getTodayLessons = (now = new Date()) => {
   if (!publication) return [];
   const lessons = publication.schedule[getDayName(schoolTime(now, publication.timezone).weekday)] ?? [];
@@ -26,19 +26,8 @@ const sourceElement = document.querySelector<HTMLElement>("#schedule-source");
 
 const statusElement = document.querySelector<HTMLElement>("#status");
 
-function updateCurrentTime(): void {
-  if (!currentTimeElement) return;
-
+function updateScheduleTime(): void {
   const now = new Date();
-  if (!publication) { currentTimeElement.textContent = "--:--"; return; }
-  currentTimeElement.title = publication.timezone;
-  currentTimeElement.dateTime = now.toISOString();
-  currentTimeElement.textContent = now.toLocaleTimeString("hy-AM", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: timezone(),
-  });
   if (publication) {
     if (renderedDay !== schoolTime(now, timezone()).date) renderSchedule();
     if (summaryElement) summaryElement.textContent = schoolSummary(getTodayLessons(now), now, timezone());
@@ -116,8 +105,8 @@ async function testNotification(): Promise<void> {
   }
 }
 
-updateCurrentTime();
-window.setInterval(updateCurrentTime, 15_000);
+updateScheduleTime();
+window.setInterval(updateScheduleTime, 15_000);
 
 const form = document.querySelector<HTMLFormElement>("#join-form")!;
 const codeInput = document.querySelector<HTMLInputElement>("#class-code")!;
@@ -126,6 +115,7 @@ const confirmButton = document.querySelector<HTMLButtonElement>("#join-confirm")
 const retryButton = document.querySelector<HTMLButtonElement>("#retry")!;
 const cancelButton = document.querySelector<HTMLButtonElement>("#join-cancel")!;
 const classElement = document.querySelector<HTMLElement>("#class-name")!;
+const classCodeButton = document.querySelector<HTMLButtonElement>("#change-class")!;
 let uiRequest = 0;
 let saving = false;
 function showError(error: unknown): void {
@@ -143,14 +133,15 @@ function changed(view: ConnectionView): void {
   }
   if (statusElement) statusElement.textContent = view.message ?? "";
   retryButton.hidden = view.source === "online";
+  classCodeButton.textContent = publication?.joinCode ?? connection?.selection?.joinCode ?? "Միանալ";
+  classElement.textContent = publication?.className ?? "";
   if (publication) {
-    classElement.textContent = `${publication.schoolName} · ${publication.className}`;
-    renderSchedule(); updateCurrentTime();
+    renderSchedule(); updateScheduleTime();
   } else {
     if (dayNameElement) dayNameElement.textContent = "Դասացուցակ";
     scheduleListElement?.replaceChildren();
     if (summaryElement) summaryElement.hidden = true;
-    updateCurrentTime();
+    updateScheduleTime();
   }
 }
 function openJoin(): void {
@@ -162,19 +153,29 @@ function openJoin(): void {
   codeInput.focus();
   void invoke("show_main_window").catch(() => {});
 }
-async function refresh(): Promise<void> {
-  const request = ++uiRequest;
-  if (statusElement) statusElement.textContent = "Բեռնվում է…";
-  try {
-    if (!connection) {
+async function readyConnection(): Promise<Connection> {
+  if (connection) return connection;
+  if (!initializingConnection) {
+    initializingConnection = (async () => {
       const config = publicationConfig(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
-      connection = new Connection(config, {
+      const next = new Connection(config, {
         read: () => invoke("read_publication"),
         begin: () => invoke("begin_publication_request"),
         commit: (token, record, cached) => invoke("commit_publication", { token, record, cached }),
       }, changed);
-      try { await connection.restore(); } catch (error) { connection = null; throw error; }
-    }
+      await next.restore();
+      connection = next;
+      return next;
+    })();
+  }
+  try { return await initializingConnection; }
+  finally { initializingConnection = null; }
+}
+async function refresh(): Promise<void> {
+  const request = ++uiRequest;
+  if (statusElement) statusElement.textContent = "Բեռնվում է…";
+  try {
+    const connection = await readyConnection();
     if (request !== uiRequest) return;
     if (!connection.selection) { if (statusElement) statusElement.textContent = "Մուտքագրեք Teacher-ից ստացած դասարանի կոդը։"; openJoin(); return; }
     confirmButton.hidden = true; previewElement.textContent = "";
@@ -183,11 +184,13 @@ async function refresh(): Promise<void> {
 }
 form.addEventListener("submit", async event => {
   event.preventDefault();
-  if (!connection || saving) return;
+  if (saving) return;
   const request = ++uiRequest;
   if (statusElement) statusElement.textContent = "";
   confirmButton.hidden = true; previewElement.textContent = "Ստուգվում է…";
   try {
+    const connection = await readyConnection();
+    if (request !== uiRequest) return;
     const candidate = await connection.preview(codeInput.value);
     if (request !== uiRequest || !candidate) return;
     previewElement.textContent = `${candidate.schoolName} · ${candidate.className}`;
