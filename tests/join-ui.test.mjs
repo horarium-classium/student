@@ -24,7 +24,7 @@ async function ui({ restore = async () => {}, configError } = {}) {
     async preview(code) { previews++; assert.equal(code, 'KRMZ'); return {schoolName:'Դպրոց',className:'5Ա'}; }
   }
   let source = await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
-  source = source.replace(/^import .*;\n/gm,'').replace(/import\.meta\.env/g,'buildEnv');
+  source = source.replace(/^import .*;\r?\n/gm,'').replace(/import\.meta\.env/g,'buildEnv');
   const js = ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
   vm.runInNewContext(js, {
     document: {querySelector:element,querySelectorAll:()=>[],addEventListener(){}}, window:{setInterval(){}},
