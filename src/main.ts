@@ -1,3 +1,5 @@
+import { listen } from "@tauri-apps/api/event";
+import { ScheduleRefresh } from "./refresh";
 import { Connection, type ConnectionView } from "./connection";
 import { publicationConfig, type Publication } from "./publication";
 import { schoolTime, schoolSummary, lessonProgress, lessonInterval } from "./school-time";
@@ -118,13 +120,17 @@ const classElement = document.querySelector<HTMLElement>("#class-name")!;
 const classCodeButton = document.querySelector<HTMLButtonElement>("#change-class")!;
 let uiRequest = 0;
 let saving = false;
-function showError(error: unknown): void {
+let refreshing = false;
+const autoRefresh = new ScheduleRefresh(() => refresh(true),
+  () => Boolean(connection?.selection) && form.hidden && !saving && !refreshing);
+function showError(error: unknown, reveal = true): void {
   if (!publication && dayNameElement) dayNameElement.textContent = "Դասացուցակ";
   if (statusElement) statusElement.textContent = error instanceof Error ? error.message : `Չհաջողվեց բեռնել կամ պահպանել դասացուցակը։ Ստուգեք պահոցի հասանելիությունն ու ձևաչափը։ ${String(error)}`;
   retryButton.hidden = false;
-  void invoke("show_main_window").catch(() => {});
+  if (reveal) void invoke("show_main_window").catch(() => {});
 }
 function changed(view: ConnectionView): void {
+  autoRefresh.reset();
   stopSpeech();
   publication = view.publication;
   if (sourceElement) {
@@ -171,16 +177,20 @@ async function readyConnection(): Promise<Connection> {
   try { return await initializingConnection; }
   finally { initializingConnection = null; }
 }
-async function refresh(): Promise<void> {
+async function refresh(background = false): Promise<void> {
+  if (refreshing) return;
+  refreshing = true;
+  autoRefresh.reset();
   const request = ++uiRequest;
-  if (statusElement) statusElement.textContent = "Բեռնվում է…";
+  if (!background && statusElement) statusElement.textContent = "Բեռնվում է…";
   try {
     const connection = await readyConnection();
     if (request !== uiRequest) return;
     if (!connection.selection) { if (statusElement) statusElement.textContent = "Մուտքագրեք Teacher-ից ստացած դասարանի կոդը։"; openJoin(); return; }
     confirmButton.hidden = true; previewElement.textContent = "";
     await connection.refresh();
-  } catch (error) { if (request === uiRequest) showError(error); }
+  } catch (error) { if (request === uiRequest) showError(error, !background); }
+  finally { refreshing = false; }
 }
 form.addEventListener("submit", async event => {
   event.preventDefault();
@@ -208,8 +218,10 @@ confirmButton.addEventListener("click", async () => {
 cancelButton.addEventListener("click", () => { uiRequest++; connection?.cancel(); form.hidden = true; });
 document.querySelector("#change-class")?.addEventListener("click", openJoin);
 retryButton.addEventListener("click", () => { if (!saving) void refresh(); });
+void listen("schedule-refresh-tick", () => { void autoRefresh.tick(); })
+  .catch(error => console.error("Schedule refresh listener:", error));
 void initializeTray()
   .catch((error) => console.error("Tray listeners:", error))
   .then(initializeSettings)
-  .then(refresh);
+  .then(() => refresh());
 notificationButton?.addEventListener("click", () => void testNotification());

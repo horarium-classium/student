@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import ts from 'typescript';
+import { load } from './load.mjs';
+const { ScheduleRefresh } = await import(await load('refresh'));
 
 // Execute the real UI handlers with native/DOM boundaries replaced; no WebView
 // or user's cache is touched. In particular, submit must not silently no-op.
-async function ui({ restore = async () => {}, configError } = {}) {
+async function ui({ restore = async () => {}, configError, selection = null, refresh = async () => {} } = {}) {
   const elements = new Map();
   const element = selector => {
     if (!elements.has(selector)) elements.set(selector, {
@@ -16,9 +18,11 @@ async function ui({ restore = async () => {}, configError } = {}) {
     });
     return elements.get(selector);
   };
-  let restores = 0, previews = 0;
+  let restores = 0, previews = 0, now = 0;
+  const events = {}, invocations = [];
   class Connection {
-    selection = null;
+    selection = selection;
+    async refresh() { await refresh(); }
     async restore() { restores++; await restore(); }
     cancel() {}
     async preview(code) { previews++; assert.equal(code, 'KRMZ'); return {schoolName:'Դպրոց',className:'5Ա'}; }
@@ -28,12 +32,19 @@ async function ui({ restore = async () => {}, configError } = {}) {
   const js = ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
   vm.runInNewContext(js, {
     document: {querySelector:element,querySelectorAll:()=>[],addEventListener(){}}, window:{setInterval(){}},
+    ScheduleRefresh: class extends ScheduleRefresh {
+      constructor(refresh, allowed) { super(refresh, allowed, () => now); }
+    },
+    listen: async (name, callback) => { events[name] = callback; },
     Connection, publicationConfig:()=>{if(configError) throw configError; return {};},
-    buildEnv:{}, invoke:async()=>{}, stopSpeech(){}, console, Error,
+    buildEnv:{}, invoke:async(name)=>{invocations.push(name);}, stopSpeech(){}, console, Error,
     initializeTray:async()=>{},initializeSettings:async()=>{},
   });
   await new Promise(resolve=>setImmediate(resolve));
-  return {element,submit:()=>element('#join-form').handlers.submit({preventDefault(){}}),
+  return {element, invocations, async tick(time) {
+      now = time; events['schedule-refresh-tick']();
+      await new Promise(resolve => setImmediate(resolve));
+    }, submit:()=>element('#join-form').handlers.submit({preventDefault(){}}),
     counts:()=>({restores,previews})};
 }
 
@@ -73,4 +84,21 @@ test('clicking the header class code opens the existing join form', async () => 
   page.element('#change-class').handlers.click();
   assert.equal(page.element('#join-form').hidden, false);
   assert.equal(page.element('#join-confirm').hidden, true);
+});
+
+
+test('native ticks refresh a selected class quietly and defer while joining', async () => {
+  let requests = 0;
+  const page = await ui({selection: {joinCode: 'KRMZ'}, refresh: async () => {
+    if (++requests > 1) throw new Error('Offline');
+  }});
+  assert.equal(requests, 1);
+  await page.tick(899_999); assert.equal(requests, 1);
+  await page.tick(900_000); assert.equal(requests, 2);
+  assert.match(page.element('#status').textContent, /Offline/);
+  assert.equal(page.invocations.includes('show_main_window'), false);
+  page.element('#change-class').handlers.click();
+  await page.tick(1_800_000); assert.equal(requests, 2);
+  page.element('#join-cancel').handlers.click();
+  await page.tick(1_810_000); assert.equal(requests, 3);
 });

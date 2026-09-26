@@ -230,6 +230,8 @@ impl Scheduler {
 pub fn start_scheduler(app: AppHandle) {
     thread::spawn(move || {
         loop {
+            // Frontend owns loading; native ticks avoid hidden-window timer throttling.
+            let _ = app.emit("schedule-refresh-tick", ());
             // Keep the source lock through delivery: a completed switch cannot be
             // followed by a notification from a cloned, obsolete schedule.
             let state = app.state::<SchedulerState>();
