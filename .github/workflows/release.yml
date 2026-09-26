@@ -1,0 +1,56 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish NSIS installer
+    runs-on: windows-latest
+    env:
+      VITE_SUPABASE_URL: ${{ vars.STUDENT_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.STUDENT_SUPABASE_PUBLISHABLE_KEY }}
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Check public Student configuration
+        run: node scripts/check-publication-env.mjs
+      - run: npm ci
+      - name: Check release version
+        run: npm run check:release-version -- "${{ github.ref_name }}"
+      - run: npm test
+      - run: npm run build
+      - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
+      - run: cargo check --manifest-path src-tauri/Cargo.toml --locked
+
+      - name: Build NSIS installer
+        run: npm run tauri build -- --bundles nsis
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Horarium Classium ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: src-tauri/target/release/bundle/nsis/*-setup.exe
+
