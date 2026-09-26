@@ -1,4 +1,4 @@
-import { fetchPublication, matchingCache, publicId, unavailableMessage, validateCache, type Publication, type PublicationCache, type PublicationConfig } from "./publication";
+import { fetchPublication, matchingCache, joinCode, unavailableMessage, validateCache, type Publication, type PublicationCache, type PublicationConfig } from "./publication";
 
 export interface ConnectionStorage {
   read(): Promise<unknown>;
@@ -25,17 +25,17 @@ export class Connection {
   }
   cancel(): void { this.epoch++; this.candidate = null; }
   private record(publication: Publication | null, id: string): PublicationCache {
-    return { version: 2, environment: this.config.environment, publicId: id, publication };
+    return { version: 3, environment: this.config.environment, joinCode: id, publication };
   }
   async preview(code: string): Promise<Publication | null> {
     this.cancel();
-    const epoch = this.epoch, id = publicId(code);
+    const epoch = this.epoch, id = joinCode(code);
     const token = await this.storage.begin();
     if (epoch !== this.epoch) return null;
     const publication = await this.fetcher(this.config, id);
     if (epoch !== this.epoch) return null;
     if (!publication) {
-      if (this.selection?.publicId === id) await this.invalidate(token, epoch, id);
+      if (this.selection?.joinCode === id) await this.invalidate(token, epoch, id);
       throw new Error(unavailableMessage);
     }
     this.candidate = { token, epoch, publication };
@@ -44,7 +44,7 @@ export class Connection {
   async confirm(): Promise<boolean> {
     const candidate = this.candidate;
     if (!candidate || candidate.epoch !== this.epoch) return false;
-    const record = this.record(candidate.publication, candidate.publication.publicId);
+    const record = this.record(candidate.publication, candidate.publication.joinCode);
     await this.storage.commit(candidate.token, record, false);
     if (candidate.epoch !== this.epoch) return false;
     this.selection = record; this.candidate = null;
@@ -64,7 +64,7 @@ export class Connection {
   async refresh(): Promise<void> {
     if (!this.selection) return;
     this.cancel();
-    const epoch = this.epoch, id = this.selection.publicId;
+    const epoch = this.epoch, id = this.selection.joinCode;
     const token = await this.storage.begin();
     if (epoch !== this.epoch) return;
     let publication: Publication | null;

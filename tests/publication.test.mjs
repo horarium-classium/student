@@ -3,21 +3,21 @@ import { test } from "node:test";
 import { load } from "./load.mjs";
 const p = await import(await load("publication"));
 const { Connection } = await import(await load("connection"));
-const id = "aaaaaaaa-0000-0000-0000-000000000001", id2 = "bbbbbbbb-0000-0000-0000-000000000002";
+const id = "KRMZ", id2 = "TQVA";
 const config = { environment: "http://127.0.0.1:54321", key: "sb_publishable_test" };
 const schedule = { Երկուշաբթի: [{ start: "09:00", end: "10:00", lesson: "Դաս" }] };
-const publication = (changes = {}) => ({ formatVersion: 1, publicId: id, revision: 1, publishedAt: "2026-09-26T10:00:00Z", schoolName: "Դպրոց", className: "5Ա", timezone: "Asia/Yerevan", schedule, ...changes });
-const record = (value = publication()) => ({ version: 2, environment: config.environment, publicId: value?.publicId ?? id, publication: value });
+const publication = (changes = {}) => ({ formatVersion: 2, joinCode: id, revision: 1, publishedAt: "2026-09-26T10:00:00Z", schoolName: "Դպրոց", className: "5Ա", timezone: "Asia/Yerevan", schedule, ...changes });
+const record = (value = publication()) => ({ version: 3, environment: config.environment, joinCode: value?.joinCode ?? id, publication: value });
 const kind = expected => error => error.kind === expected;
 test("publication envelope validates identity, metadata, timezone, format and empty schedule", () => {
   assert.deepEqual(p.validatePublication(publication(), id), publication());
   assert.deepEqual(p.validatePublication(publication({ schedule: {} }), id).schedule, {});
-  for (const change of [{ publicId: id2 }, { revision: 0 }, { revision: 1.5 }, { publishedAt: "yesterday" }, { publishedAt: "2026-02-30T00:00:00Z" }, { schoolName: " " }, { className: null }, { timezone: "Mars/Olympus" }, { timezone: "+04:00" }, { schedule: [] }]) assert.throws(() => p.validatePublication(publication(change), id), kind("payload"));
+  for (const change of [{ joinCode: id2 }, { revision: 0 }, { revision: 1.5 }, { publishedAt: "yesterday" }, { publishedAt: "2026-02-30T00:00:00Z" }, { schoolName: " " }, { className: null }, { timezone: "Mars/Olympus" }, { timezone: "+04:00" }, { schedule: [] }]) assert.throws(() => p.validatePublication(publication(change), id), kind("payload"));
   assert.throws(() => p.validatePublication({}, id), kind("payload"));
   assert.throws(() => p.validatePublication(publication({ publishedAt: "2026-09-26T24:00:00Z" }), id), kind("payload"));
-  assert.throws(() => p.validatePublication(publication({ formatVersion: 2 }), id), kind("format"));
-  assert.equal(p.publicId(` ${id.toUpperCase()} `), id);
-  assert.throws(() => p.publicId("class 5"), kind("code"));
+  assert.throws(() => p.validatePublication(publication({ formatVersion: 3 }), id), kind("format"));
+  assert.equal(p.joinCode(` ${id.toLowerCase()} `), id);
+  assert.throws(() => p.joinCode("class 5"), kind("code"));
 });
 test("build config normalizes the endpoint, permits public keys and rejects secrets", () => {
   assert.equal(p.publicationConfig(config.environment + "/", config.key).environment, config.environment);
@@ -26,7 +26,7 @@ test("build config normalizes the endpoint, permits public keys and rejects secr
 test("RPC distinguishes null, empty, HTTP, malformed payload and network", async () => {
   const fetcher = async (url, init) => {
     assert.equal(url, config.environment + "/rest/v1/rpc/get_published_schedule");
-    assert.deepEqual(JSON.parse(init.body), { p_public_id: id });
+    assert.deepEqual(JSON.parse(init.body), { p_join_code: id });
     assert.equal(init.headers.apikey, config.key);
     return Response.json(publication({ schedule: {} }));
   };
@@ -44,7 +44,7 @@ test("10 second timeout aborts a stalled RPC", async t => {
   await assert.rejects(pending, kind("timeout"));
 });
 test("versioned cache rejects Gist, corrupt, future and mismatched publication data", () => {
-  for (const value of [schedule, [], { ...record(), version: 3 }, record(publication({ timezone: "bad" })), { ...record(), publicId: id2 }]) assert.throws(() => p.validateCache(value));
+  for (const value of [schedule, [], { ...record(), version: 4 }, record(publication({ timezone: "bad" })), { ...record(), joinCode: id2 }]) assert.throws(() => p.validateCache(value));
   const cache = p.validateCache(record());
   assert.equal(p.matchingCache(cache, config.environment, id).revision, 1);
   assert.equal(p.matchingCache(cache, "https://school.supabase.co", id), null);
@@ -66,11 +66,11 @@ test("confirmation persists selected class; failed lookup/save keeps previous co
   const f = fixture(), c = f.connection();
   assert.equal(await c.restore(), false);
   await c.preview(id); assert.equal(f.saved(), null); await c.confirm();
-  assert.equal(f.saved().publicId, id);
-  f.response(new Error("offline")); await assert.rejects(c.preview(id2)); assert.equal(c.selection.publicId, id);
-  f.response(publication({ publicId: id2 })); await c.preview(id2); f.fail(true);
-  await assert.rejects(c.confirm()); assert.equal(c.selection.publicId, id); assert.equal(f.saved().publicId, id);
-  f.fail(false); await c.confirm(); assert.equal(c.selection.publicId, id2);
+  assert.equal(f.saved().joinCode, id);
+  f.response(new Error("offline")); await assert.rejects(c.preview(id2)); assert.equal(c.selection.joinCode, id);
+  f.response(publication({ joinCode: id2 })); await c.preview(id2); f.fail(true);
+  await assert.rejects(c.confirm()); assert.equal(c.selection.joinCode, id); assert.equal(f.saved().joinCode, id);
+  f.fail(false); await c.confirm(); assert.equal(c.selection.joinCode, id2);
 });
 test("offline restart, new revision, persistent null and empty publication", async () => {
   const f = fixture(record()), c = f.connection(); await c.restore();
@@ -91,7 +91,7 @@ test("late response cannot replace confirmed new class, cache or active view", a
   let finish;
   f.response(() => new Promise(resolve => { finish = resolve; }));
   const old = c.refresh(); await new Promise(resolve => setImmediate(resolve));
-  f.response(publication({ publicId: id2 })); await c.preview(id2); await c.confirm();
+  f.response(publication({ joinCode: id2 })); await c.preview(id2); await c.confirm();
   finish(publication({ revision: 40 })); await old;
-  assert.equal(f.saved().publicId, id2); assert.equal(f.views.at(-1).publication.publicId, id2);
+  assert.equal(f.saved().joinCode, id2); assert.equal(f.views.at(-1).publication.joinCode, id2);
 });

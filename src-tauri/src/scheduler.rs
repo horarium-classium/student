@@ -503,8 +503,8 @@ mod tests {
         runtime.activate(Some(record.clone()));
         assert!(runtime.engine.tick(&schedule(), at(21, 9, 31)).is_empty());
         let mut other = record.clone();
-        other.public_id = "bbbbbbbb-0000-0000-0000-000000000002".into();
-        other.publication.as_mut().unwrap().public_id = other.public_id.clone();
+        other.join_code = "TQVA".into();
+        other.publication.as_mut().unwrap().join_code = other.join_code.clone();
         runtime.activate(Some(other));
         assert!(runtime.engine.last_check.is_none());
         assert!(runtime.engine.notified_events.is_empty());

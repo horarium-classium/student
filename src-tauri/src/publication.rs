@@ -3,12 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
 use tauri::{AppHandle, Emitter, Manager};
 
-pub const FILE: &str = "publication-v2.json";
+pub const FILE: &str = "publication-v3.json";
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Publication {
     pub format_version: u32,
-    pub public_id: String,
+    pub join_code: String,
     pub revision: u64,
     pub published_at: String,
     pub school_name: String,
@@ -21,7 +21,7 @@ pub struct Publication {
 pub struct Record {
     pub version: u32,
     pub environment: String,
-    pub public_id: String,
+    pub join_code: String,
     #[serde(deserialize_with = "required_publication")]
     pub publication: Option<Publication>,
 }
@@ -30,25 +30,18 @@ fn required_publication<'de, D: serde::Deserializer<'de>>(
 ) -> Result<Option<Publication>, D::Error> {
     Option::<Publication>::deserialize(deserializer)
 }
-pub fn valid_uuid(value: &str) -> bool {
-    value.len() == 36
-        && value.bytes().enumerate().all(|(i, ch)| {
-            if [8, 13, 18, 23].contains(&i) {
-                ch == b'-'
-            } else {
-                ch.is_ascii_hexdigit() && !ch.is_ascii_uppercase()
-            }
-        })
+pub fn valid_join_code(value: &str) -> bool {
+    value.len() == 4 && value.bytes().all(|ch| b"ABCDEFGHJKLMNPQRTUVWXYZ".contains(&ch))
 }
 impl Record {
     pub fn identity(&self) -> String {
-        format!("{}/{}", self.environment, self.public_id)
+        format!("{}/{}", self.environment, self.join_code)
     }
     pub fn validate(&self) -> Result<(), String> {
         let url = tauri::Url::parse(&self.environment).map_err(|_| "Invalid environment")?;
         let local = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
-        if self.version != 2
-            || !valid_uuid(&self.public_id)
+        if self.version != 3
+            || !valid_join_code(&self.join_code)
             || !url.username().is_empty()
             || url.password().is_some()
             || url.query().is_some()
@@ -59,8 +52,8 @@ impl Record {
             return Err("Invalid publication cache identity/version".into());
         }
         if let Some(p) = &self.publication {
-            if p.format_version != 1
-                || p.public_id != self.public_id
+            if p.format_version != 2
+                || p.join_code != self.join_code
                 || p.revision == 0
                 || p.revision > 9_007_199_254_740_991
                 || p.school_name.trim().is_empty()
@@ -208,11 +201,28 @@ pub mod tests {
     use super::*;
     pub fn record() -> Record {
         serde_json::from_value(serde_json::json!({
-            "version": 2, "environment": "http://127.0.0.1:54321", "publicId": "aaaaaaaa-0000-0000-0000-000000000001",
-            "publication": {"formatVersion":1,"publicId":"aaaaaaaa-0000-0000-0000-000000000001","revision":1,
+            "version": 3, "environment": "http://127.0.0.1:54321", "joinCode": "KRMZ",
+            "publication": {"formatVersion":2,"joinCode":"KRMZ","revision":1,
                 "publishedAt":"2026-09-26T10:00:00Z","schoolName":"Դպրոց","className":"5Ա","timezone":"Asia/Yerevan",
                 "schedule":{"Երկուշաբթի":[{"start":"09:00","end":"10:00","lesson":"Դաս"}]}}
         })).unwrap()
+    }
+    #[test]
+    fn uuid_cache_and_tombstone_do_not_block_join_code_connection() {
+        let directory = tempfile::tempdir().unwrap();
+        let legacy = r#"{"version":2,"environment":"http://127.0.0.1:54321","publicId":"aaaaaaaa-1100-0000-0000-000000000001","publication":null}"#;
+        for name in ["publication-v2.json", "publication-v2.invalidated.json"] {
+            fs::write(directory.path().join(name), legacy).unwrap();
+        }
+        let path = directory.path().join(FILE);
+        assert!(read(&path).unwrap().is_none());
+        let mut runtime = crate::scheduler::Runtime::default();
+        let token = runtime.request;
+        commit(&mut runtime, &path, token, record(), false).unwrap();
+        assert_eq!(read(&path).unwrap().unwrap().join_code, "KRMZ");
+        for name in ["publication-v2.json", "publication-v2.invalidated.json"] {
+            assert_eq!(fs::read_to_string(directory.path().join(name)).unwrap(), legacy);
+        }
     }
     #[test]
     fn native_cache_validation_and_persistent_invalidation() {
@@ -240,7 +250,7 @@ pub mod tests {
     }
     #[test]
     fn native_metadata_validation_rejects_wrong_class_timezone_and_version() {
-        for field in ["publicId", "timezone", "publishedAt"] {
+        for field in ["joinCode", "timezone", "publishedAt"] {
             let mut value = serde_json::to_value(record()).unwrap();
             value["publication"][field] = "invalid".into();
             assert!(serde_json::from_value::<Record>(value)
@@ -264,8 +274,8 @@ pub mod tests {
         commit(&mut runtime, &path, 1, record(), false).unwrap();
         let original = fs::read_to_string(&path).unwrap();
         let mut other = record();
-        other.public_id = "bbbbbbbb-0000-0000-0000-000000000002".into();
-        other.publication.as_mut().unwrap().public_id = other.public_id.clone();
+        other.join_code = "TQVA".into();
+        other.publication.as_mut().unwrap().join_code = other.join_code.clone();
         assert!(commit(&mut runtime, &path, 1, other.clone(), true).is_err());
         runtime.request = 2;
         assert!(commit(&mut runtime, &path, 1, other.clone(), false).is_err());
