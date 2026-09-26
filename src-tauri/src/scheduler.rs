@@ -1,19 +1,91 @@
 use crate::{audio, model::WeeklySchedule, settings::SettingsState};
-use chrono::{Datelike, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime};
+#[cfg(test)]
+use chrono::NaiveDateTime;
+use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
 use std::{collections::HashSet, sync::Mutex, thread, time::Duration as StdDuration};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
-pub struct SchedulerState {
-    pub schedule: Mutex<WeeklySchedule>,
+pub struct SchedulerState(pub Mutex<Runtime>);
+#[derive(Default)]
+pub struct Runtime {
+    pub request: u64,
+    record: Option<crate::publication::Record>,
+    engine: Scheduler,
+    generation: u64,
 }
-
-#[tauri::command]
-pub fn update_schedule(
-    state: State<'_, SchedulerState>,
-    schedule: WeeklySchedule,
-) -> Result<(), String> {
-    *state.schedule.lock().map_err(|error| error.to_string())? = schedule;
+impl Runtime {
+    pub fn identity(&self) -> Option<String> {
+        self.record.as_ref().map(|r| r.identity())
+    }
+    pub fn source(&self) -> String {
+        format!(
+            "{}:{}",
+            self.generation,
+            self.record
+                .as_ref()
+                .map(|r| r.identity())
+                .unwrap_or_default()
+        )
+    }
+    pub fn activate(&mut self, record: Option<crate::publication::Record>) {
+        let identity = |r: &Option<crate::publication::Record>| {
+            r.as_ref().and_then(|r| {
+                r.publication
+                    .as_ref()
+                    .map(|p| format!("{}:{}", r.identity(), p.timezone))
+            })
+        };
+        let empty = record
+            .as_ref()
+            .and_then(|r| r.publication.as_ref())
+            .is_none_or(|p| p.schedule.values().all(Vec::is_empty));
+        if identity(&self.record) != identity(&record) || empty {
+            self.engine = Scheduler::default();
+        }
+        self.record = record;
+        self.generation += 1;
+        audio::cancel_pending();
+    }
+}
+pub fn validate_schedule(schedule: &WeeklySchedule) -> Result<(), String> {
+    for (day, lessons) in schedule {
+        if ![
+            "Երկուշաբթի",
+            "Երեքշաբթի",
+            "Չորեքշաբթի",
+            "Հինգշաբթի",
+            "Ուրբաթ",
+            "Շաբաթ",
+            "Կիրակի",
+        ]
+        .contains(&day.as_str())
+        {
+            return Err("Invalid weekday".into());
+        }
+        let mut sorted = lessons.iter().collect::<Vec<_>>();
+        sorted.sort_by_key(|lesson| &lesson.start);
+        let mut previous_end = "";
+        for lesson in sorted {
+            let valid_time = |v: &str| {
+                v.len() == 5
+                    && v.as_bytes()[2] == b':'
+                    && NaiveTime::parse_from_str(v, "%H:%M").is_ok()
+                    && v.bytes()
+                        .enumerate()
+                        .all(|(i, c)| i == 2 || c.is_ascii_digit())
+            };
+            if !valid_time(&lesson.start)
+                || !valid_time(&lesson.end)
+                || lesson.start >= lesson.end
+                || lesson.start.as_str() < previous_end
+                || lesson.lesson.trim().is_empty()
+            {
+                return Err("Invalid or overlapping lesson".into());
+            }
+            previous_end = &lesson.end;
+        }
+    }
     Ok(())
 }
 
@@ -29,10 +101,13 @@ fn day_name(day: chrono::Weekday) -> &'static str {
     }
 }
 
-fn schedule_time(value: &str, date: NaiveDate) -> Option<NaiveDateTime> {
-    NaiveTime::parse_from_str(value, "%H:%M")
-        .ok()
-        .map(|time| date.and_time(time))
+fn schedule_time(value: &str, date: NaiveDate, timezone: chrono_tz::Tz) -> Option<DateTime<Utc>> {
+    let time = NaiveTime::parse_from_str(value, "%H:%M").ok()?;
+    // Missing local times are skipped; repeated local times use the earlier instant.
+    timezone
+        .from_local_datetime(&date.and_time(time))
+        .earliest()
+        .map(|time| time.with_timezone(&Utc))
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -44,24 +119,35 @@ struct SpeechNotification {
 
 #[derive(Default)]
 struct Scheduler {
-    last_check: Option<NaiveDateTime>,
+    last_check: Option<DateTime<Utc>>,
     notified_events: HashSet<(NaiveDate, String, String, String, bool)>,
 }
 
 impl Scheduler {
+    #[cfg(test)]
     fn tick(&mut self, schedule: &WeeklySchedule, now: NaiveDateTime) -> Vec<SpeechNotification> {
+        self.tick_zoned(schedule, now.and_utc(), chrono_tz::UTC)
+    }
+    fn tick_zoned(
+        &mut self,
+        schedule: &WeeklySchedule,
+        now: DateTime<Utc>,
+        timezone: chrono_tz::Tz,
+    ) -> Vec<SpeechNotification> {
         let previous = self.last_check.replace(now);
-        let today = now.date();
+        let today = now.with_timezone(&timezone).date_naive();
         let tomorrow = today.succ_opt().unwrap_or(today);
-        if previous.is_none_or(|date| date.date() != today) {
+        if previous.is_none_or(|date| date.with_timezone(&timezone).date_naive() != today) {
             // Retain tomorrow's midnight pre-alert, but discard all past-day keys.
             self.notified_events
                 .retain(|key| key.0 >= today && key.0 <= tomorrow);
         }
         let mut messages = Vec::new();
         let mut dates = Vec::new();
-        if let Some(last) = previous.filter(|last| last.date() < today) {
-            dates.push(last.date());
+        if let Some(last) =
+            previous.filter(|last| last.with_timezone(&timezone).date_naive() < today)
+        {
+            dates.push(last.with_timezone(&timezone).date_naive());
         }
         dates.extend([today, tomorrow]);
         for date in dates {
@@ -69,10 +155,10 @@ impl Scheduler {
                 continue;
             };
             for lesson in lessons {
-                let Some(start) = schedule_time(&lesson.start, date) else {
+                let Some(start) = schedule_time(&lesson.start, date, timezone) else {
                     continue;
                 };
-                let Some(end) = schedule_time(&lesson.end, date) else {
+                let Some(end) = schedule_time(&lesson.end, date, timezone) else {
                     continue;
                 };
                 if start >= end {
@@ -119,8 +205,10 @@ impl Scheduler {
                     let next = lessons
                         .iter()
                         .filter_map(|next| {
-                            let next_start = schedule_time(&next.start, date)?;
-                            (next_start >= end).then_some((next_start, next.lesson.as_str()))
+                            let next_start = schedule_time(&next.start, date, timezone)?;
+                            let next_end = schedule_time(&next.end, date, timezone)?;
+                            (next_start >= end && next_start < next_end)
+                                .then_some((next_start, next.lesson.as_str()))
                         })
                         .min_by_key(|(start, _)| *start);
                     let next_text = next
@@ -141,34 +229,42 @@ impl Scheduler {
 
 pub fn start_scheduler(app: AppHandle) {
     thread::spawn(move || {
-        let mut scheduler = Scheduler::default();
         loop {
-            let schedule = app
-                .state::<SchedulerState>()
-                .schedule
-                .lock()
-                .map(|schedule| schedule.clone())
-                .unwrap_or_default();
-            let settings = app
-                .state::<SettingsState>()
-                .0
-                .lock()
-                .map(|settings| settings.clone())
-                .unwrap_or_default();
-            for message in scheduler.tick(&schedule, Local::now().naive_local()) {
-                if !settings.notifications_enabled {
-                    continue;
+            // Keep the source lock through delivery: a completed switch cannot be
+            // followed by a notification from a cloned, obsolete schedule.
+            let state = app.state::<SchedulerState>();
+            if let Ok(mut runtime) = state.0.lock() {
+                let settings = app
+                    .state::<SettingsState>()
+                    .0
+                    .lock()
+                    .map(|s| s.clone())
+                    .unwrap_or_default();
+                if let Some(publication) =
+                    runtime.record.as_ref().and_then(|r| r.publication.clone())
+                {
+                    if let Ok(timezone) = publication.timezone.parse::<chrono_tz::Tz>() {
+                        for message in
+                            runtime
+                                .engine
+                                .tick_zoned(&publication.schedule, Utc::now(), timezone)
+                        {
+                            if !settings.notifications_enabled {
+                                continue;
+                            }
+                            let _ = app
+                                .notification()
+                                .builder()
+                                .title("Դասացուցակ")
+                                .body(&message.body)
+                                .show();
+                            if settings.speech_enabled {
+                                let _ = app.emit("speak-notification", serde_json::json!({"source": runtime.source(), "kind": message.kind, "body": message.body}));
+                            }
+                            audio::ring(app.clone());
+                        }
+                    }
                 }
-                let _ = app
-                    .notification()
-                    .builder()
-                    .title("Դասացուցակ")
-                    .body(&message.body)
-                    .show();
-                if settings.speech_enabled {
-                    let _ = app.emit("speak-notification", &message);
-                }
-                audio::ring(app.clone());
             }
             thread::sleep(StdDuration::from_secs(10));
         }
@@ -336,5 +432,140 @@ mod tests {
         assert!(messages[0].body.contains("2026-09-21"));
         assert!(engine.notified_events.is_empty());
         assert!(engine.tick(&schedule, at(22, 0, 2)).is_empty());
+    }
+    #[test]
+    fn school_timezone_and_dst_use_real_instants() {
+        let mut engine = Scheduler::default();
+        let tz = "Asia/Yerevan".parse().unwrap();
+        assert_eq!(
+            engine
+                .tick_zoned(&schedule(), at(21, 5, 30).and_utc(), tz)
+                .len(),
+            1
+        );
+        let ny = chrono_tz::America::New_York;
+        let spring = NaiveDate::from_ymd_opt(2026, 3, 8).unwrap();
+        assert!(schedule_time("02:30", spring, ny).is_none());
+        let fall = NaiveDate::from_ymd_opt(2026, 11, 1).unwrap();
+        assert_eq!(
+            schedule_time("01:30", fall, ny).unwrap(),
+            fall.and_hms_opt(5, 30, 0).unwrap().and_utc()
+        );
+        let repeated = [(
+            "Կիրակի".into(),
+            vec![Lesson {
+                start: "01:00".into(),
+                end: "01:45".into(),
+                lesson: "Դաս".into(),
+            }],
+        )]
+        .into();
+        let mut engine = Scheduler::default();
+        assert_eq!(
+            engine
+                .tick_zoned(&repeated, fall.and_hms_opt(5, 15, 0).unwrap().and_utc(), ny)
+                .len(),
+            1
+        );
+        assert_eq!(
+            engine
+                .tick_zoned(&repeated, fall.and_hms_opt(6, 15, 0).unwrap().and_utc(), ny)
+                .len(),
+            1
+        ); // missed end, no repeated start
+        assert!(engine
+            .tick_zoned(&repeated, fall.and_hms_opt(6, 30, 0).unwrap().and_utc(), ny)
+            .is_empty());
+        let skipped = [(
+            "Կիրակի".into(),
+            vec![Lesson {
+                start: "02:30".into(),
+                end: "03:30".into(),
+                lesson: "Դաս".into(),
+            }],
+        )]
+        .into();
+        assert!(Scheduler::default()
+            .tick_zoned(
+                &skipped,
+                spring.and_hms_opt(7, 15, 0).unwrap().and_utc(),
+                ny
+            )
+            .is_empty());
+    }
+
+    #[test]
+    fn source_switch_and_empty_publication_reset_old_reminders() {
+        let record = crate::publication::tests::record();
+        let mut runtime = Runtime::default();
+        runtime.activate(Some(record.clone()));
+        runtime.engine.tick(&schedule(), at(21, 9, 30));
+        runtime.activate(Some(record.clone()));
+        assert!(runtime.engine.tick(&schedule(), at(21, 9, 31)).is_empty());
+        let mut other = record.clone();
+        other.public_id = "bbbbbbbb-0000-0000-0000-000000000002".into();
+        other.publication.as_mut().unwrap().public_id = other.public_id.clone();
+        runtime.activate(Some(other));
+        assert!(runtime.engine.last_check.is_none());
+        assert!(runtime.engine.notified_events.is_empty());
+        assert_eq!(runtime.engine.tick(&schedule(), at(21, 9, 31)).len(), 1);
+        let mut empty = record.clone();
+        empty.publication.as_mut().unwrap().schedule.clear();
+        runtime.activate(Some(empty));
+        assert!(runtime.engine.notified_events.is_empty());
+        assert!(runtime.engine.last_check.is_none());
+        runtime.activate(None);
+        assert!(runtime.record.is_none());
+    }
+
+    #[test]
+    fn native_input_validation_rejects_invalid_schedules() {
+        assert!(validate_schedule(&schedule()).is_ok());
+        let mut invalid = schedule();
+        invalid.get_mut("Երկուշաբթի").unwrap()[0].start = "9:00".into();
+        assert!(validate_schedule(&invalid).is_err());
+        invalid = schedule();
+        invalid.get_mut("Երկուշաբթի").unwrap()[0].end = "10:15".into();
+        assert!(validate_schedule(&invalid).is_err());
+        invalid.insert("Monday".into(), vec![]);
+        assert!(validate_schedule(&invalid).is_err());
+    }
+    #[test]
+    fn next_lesson_skips_a_nonexistent_dst_endpoint() {
+        let day = NaiveDate::from_ymd_opt(2026, 3, 8).unwrap();
+        let schedule = [(
+            "Կիրակի".into(),
+            vec![
+                Lesson {
+                    start: "00:00".into(),
+                    end: "00:30".into(),
+                    lesson: "Առաջին".into(),
+                },
+                Lesson {
+                    start: "01:30".into(),
+                    end: "02:30".into(),
+                    lesson: "Բաց թողնվող".into(),
+                },
+                Lesson {
+                    start: "03:30".into(),
+                    end: "04:00".into(),
+                    lesson: "Հաջորդ".into(),
+                },
+            ],
+        )]
+        .into();
+        let mut engine = Scheduler::default();
+        engine.tick_zoned(
+            &schedule,
+            day.and_hms_opt(5, 15, 0).unwrap().and_utc(),
+            chrono_tz::America::New_York,
+        );
+        let messages = engine.tick_zoned(
+            &schedule,
+            day.and_hms_opt(5, 30, 0).unwrap().and_utc(),
+            chrono_tz::America::New_York,
+        );
+        assert_eq!(messages.len(), 1);
+        assert!(messages[0].body.contains("Հաջորդը՝ «Հաջորդ»"));
     }
 }

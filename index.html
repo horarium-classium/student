@@ -19,7 +19,21 @@
         </div>
         <span class="live-indicator"><span></span><time id="current-time">--:--</time></span>
       </header>
+      <p id="class-name" class="class-name"></p>
+      <button id="change-class" type="button">Փոխել դասարանը</button>
+      <form id="join-form" hidden>
+        <h2>Միանալ դասարանին</h2>
+        <label for="class-code">Դասարանի կոդը</label>
+        <input id="class-code" type="text" autocomplete="off" spellcheck="false" required placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        <button type="submit">Ստուգել կոդը</button>
+        <p id="class-preview" role="status"></p>
+        <button id="join-confirm" type="button" hidden>Միանալ</button>
+        <button id="join-cancel" type="button" hidden>Չեղարկել</button>
+      </form>
+      <p class="source">Նոր հրապարակումը բեռնվում է ծրագիրը վերագործարկելիս։</p>
+      <button id="retry" type="button" hidden>Կրկին փորձել</button>
       <p id="schedule-source" class="source" aria-live="polite"></p>
+      <p id="settings-status" role="status"></p>
       <p id="status" role="status" aria-live="polite"></p>
       <p id="lesson-summary" class="lesson-summary" aria-live="polite" hidden></p>
       <div id="schedule-list" class="schedule-list"></div>

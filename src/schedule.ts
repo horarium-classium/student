@@ -1,9 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import type { Lesson, Schedule } from "./types";
-
-export const scheduleUrl = "https://gist.githubusercontent.com/armenbadal/d384e13e190a1d6ff9fb9a1f89205ae0/raw/horarium-classium.json";
-
-const scheduleTimeoutMs = 10_000;
+import type { Schedule } from "./types";
 
 export const dayNames: Record<number, string> = {
   1: "Երկուշաբթի",
@@ -15,11 +10,9 @@ export const dayNames: Record<number, string> = {
   7: "Կիրակի",
 };
 
-export let schedule: Schedule = {};
-
 export function validateSchedule(value: unknown): Schedule {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Gist schedule must be a JSON object.");
+    throw new Error("Schedule must be a JSON object.");
   }
 
   const remoteSchedule = value as Record<string, unknown>;
@@ -68,54 +61,6 @@ export function validateSchedule(value: unknown): Schedule {
   return validated;
 }
 
-export interface ScheduleLoadResult {
-  source: "online" | "cached";
-  updatedAt: string | null;
-  warning?: string;
-}
-
-export async function loadSchedules(): Promise<ScheduleLoadResult> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), scheduleTimeoutMs);
-  let loadedSchedule: Schedule;
-
-  try {
-    const response = await fetch(scheduleUrl, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`Could not load schedule: HTTP ${response.status}.`);
-    }
-    loadedSchedule = validateSchedule(await response.json());
-  } catch (error) {
-    try {
-      const cached = await invoke<string>("read_schedule_cache");
-      if (cached !== null) {
-        schedule = validateSchedule(JSON.parse(cached));
-        return { source: "cached", updatedAt: null };
-      }
-    } catch {
-      // Unavailable storage or invalid cached data must preserve the load error.
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-
-  schedule = loadedSchedule;
-  try {
-    await invoke("write_schedule_cache", { data: JSON.stringify(loadedSchedule) });
-  } catch {
-    return { source: "online", updatedAt: new Date().toISOString(), warning: "Չհաջողվեց պահել offline տարբերակը։" };
-  }
-  return { source: "online", updatedAt: new Date().toISOString() };
-}
-
 export function getDayName(day: number): string {
   return dayNames[day] ?? "Դասացուցակ";
-}
-
-export function getTodayLessons(date = new Date()): Lesson[] {
-  return schedule[getDayName(date.getDay() === 0 ? 7 : date.getDay())] ?? [];
 }

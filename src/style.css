@@ -49,3 +49,13 @@ h1 { margin: 0; font-family: Georgia, serif; font-size: 31px; font-weight: 600; 
 .lesson-summary { padding: 12px; border-left: 3px solid #3d9b6b; border-radius: 6px; background: #dceee4; font-size: 13px; line-height: 1.7; }
 .empty-day { padding: 22px 14px; text-align: center; font-size: 14px; }
 #status:empty, #lesson-summary:empty, #schedule-source:empty { display: none; }
+
+[hidden] { display: none !important; }
+button, input { font: inherit; border: 1px solid #afc5c1; border-radius: 6px; padding: 9px 10px; }
+button { cursor: pointer; background: #f4faf8; color: #173d45; font-size: 12px; margin: 4px 2px 4px 0; }
+button:focus-visible, input:focus-visible { outline: 2px solid #28784f; outline-offset: 2px; }
+#join-form { margin-top: 14px; padding: 14px; border-radius: 10px; background: #fff; }
+#join-form h2 { font-size: 17px; margin-top: 0; }
+#join-form label { display: block; font-size: 12px; margin-bottom: 7px; }
+#class-code { width: 100%; font-size: 12px; }
+.class-name, #class-preview { overflow-wrap: anywhere; font-size: 14px; line-height: 1.6; }

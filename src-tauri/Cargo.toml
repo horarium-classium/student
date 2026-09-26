@@ -22,6 +22,10 @@ tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["clock"] }
+# Bundled IANA rules; scheduler must work offline and without the system timezone.
+chrono-tz = { version = "0.10", default-features = false, features = ["std"] }
+# Atomic replacement of existing files, including Windows.
+tempfile = "3"
 # Native playback on all desktop targets; omit codec/format feature bundles.
 rodio = { version = "0.21.1", default-features = false, features = ["playback"] }
 tauri-plugin-notification = "2.4.0"

@@ -10,12 +10,13 @@ async function load(name) {
 }
 
 test("summary handles empty, upcoming, current, adjacent and finished lessons", async () => {
-  const { lessonSummary } = await load("summary");
+  const { schoolSummary } = await load("school-time");
+  const lessonSummary = (lessons, now) => schoolSummary(lessons, now, "UTC");
   const lessons = [
     { start: "09:00", end: "10:00", lesson: "Մաթեմատիկա" },
     { start: "10:00", end: "11:00", lesson: "Ֆիզիկա" },
   ];
-  const at = (hour, minute = 0) => new Date(2026, 8, 21, hour, minute);
+  const at = (hour, minute = 0) => new Date(Date.UTC(2026, 8, 21, hour, minute));
   assert.equal(lessonSummary([], at(8)), "Այսօր դասեր չկան։");
   assert.equal(lessonSummary([...lessons].reverse(), at(8)), "Հաջորդ դասը՝ Մաթեմատիկա — 09:00");
   assert.equal(lessonSummary(lessons, at(9)), "Հիմա՝ Մաթեմատիկա · մինչև 10:00");

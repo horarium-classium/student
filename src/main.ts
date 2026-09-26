@@ -1,6 +1,9 @@
-import { lessonSummary } from "./summary";
+import { Connection, type ConnectionView } from "./connection";
+import { publicationConfig, type Publication } from "./publication";
+import { schoolTime, schoolSummary, lessonProgress, lessonInterval } from "./school-time";
+import { stopSpeech } from "./speech";
 import { invoke } from "@tauri-apps/api/core";
-import { getDayName, getTodayLessons, loadSchedules, schedule } from "./schedule";
+import { getDayName } from "./schedule";
 import { initializeTray } from "./tray";
 import { initializeSettings } from "./settings";
 import { notify } from "./notifications";
@@ -9,7 +12,14 @@ const dayNameElement = document.querySelector<HTMLElement>("#day-name");
 const scheduleListElement = document.querySelector<HTMLElement>("#schedule-list");
 const currentTimeElement = document.querySelector<HTMLTimeElement>("#current-time");
 const notificationButton = document.querySelector<HTMLButtonElement>("#notification-test");
-let hasSchedule = false;
+let publication: Publication | null = null;
+let connection: Connection | null = null;
+const getTodayLessons = (now = new Date()) => {
+  if (!publication) return [];
+  const lessons = publication.schedule[getDayName(schoolTime(now, publication.timezone).weekday)] ?? [];
+  return lessons.filter(lesson => lessonInterval(lesson, now, publication!.timezone));
+};
+const timezone = () => publication?.timezone ?? "UTC";
 let renderedDay = "";
 const summaryElement = document.querySelector<HTMLElement>("#lesson-summary");
 const sourceElement = document.querySelector<HTMLElement>("#schedule-source");
@@ -20,45 +30,25 @@ function updateCurrentTime(): void {
   if (!currentTimeElement) return;
 
   const now = new Date();
+  if (!publication) { currentTimeElement.textContent = "--:--"; return; }
+  currentTimeElement.title = publication.timezone;
   currentTimeElement.dateTime = now.toISOString();
   currentTimeElement.textContent = now.toLocaleTimeString("hy-AM", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: timezone(),
   });
-  if (hasSchedule) {
-    if (renderedDay !== now.toDateString()) renderSchedule();
-    if (summaryElement) summaryElement.textContent = lessonSummary(getTodayLessons(now), now);
+  if (publication) {
+    if (renderedDay !== schoolTime(now, timezone()).date) renderSchedule();
+    if (summaryElement) summaryElement.textContent = schoolSummary(getTodayLessons(now), now, timezone());
   }
   updateCurrentLesson(now);
 }
 
-function parseScheduleTime(time: string, date: Date): Date | undefined {
-  const match = /^(\d{2}):(\d{2})$/.exec(time);
-  if (!match) return undefined;
-
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) return undefined;
-
-  const result = new Date(date);
-  result.setHours(hours, minutes, 0, 0);
-  return result;
-}
-
-function getLessonProgress(startText: string, endText: string, now: Date): number | undefined {
-  const start = parseScheduleTime(startText, now);
-  const end = parseScheduleTime(endText, now);
-  if (start === undefined || end === undefined || now < start || now >= end) return undefined;
-
-  const duration = end.getTime() - start.getTime();
-  const elapsed = now.getTime() - start.getTime();
-  return Math.min(100, Math.max(0, (elapsed / duration) * 100));
-}
-
 function updateCurrentLesson(now: Date): void {
   document.querySelectorAll<HTMLTableRowElement>(".schedule-table tbody tr").forEach((row) => {
-    const progress = getLessonProgress(row.dataset.start ?? "", row.dataset.end ?? "", now);
+    const progress = lessonProgress({ start: row.dataset.start ?? "", end: row.dataset.end ?? "", lesson: "" }, now, timezone());
     const isCurrent = progress !== undefined;
     row.classList.toggle("current-lesson", isCurrent);
     row.setAttribute("aria-current", isCurrent ? "time" : "false");
@@ -75,12 +65,12 @@ function renderSchedule(): void {
 
   const today = new Date();
   const lessons = getTodayLessons(today);
-  renderedDay = today.toDateString();
+  renderedDay = schoolTime(today, timezone()).date;
   if (summaryElement) {
     summaryElement.hidden = lessons.length === 0;
-    summaryElement.textContent = lessonSummary(lessons, today);
+    summaryElement.textContent = schoolSummary(lessons, today, timezone());
   }
-  dayNameElement.textContent = getDayName(today.getDay() === 0 ? 7 : today.getDay());
+  dayNameElement.textContent = getDayName(schoolTime(today, timezone()).weekday);
 
   if (lessons.length === 0) {
     const empty = document.createElement("p");
@@ -115,14 +105,6 @@ function renderSchedule(): void {
   updateCurrentLesson(today);
 }
 
-function showScheduleError(error: unknown): void {
-  console.error(error);
-  if (dayNameElement) dayNameElement.textContent = "Դասացուցակ";
-  if (scheduleListElement) {
-    scheduleListElement.textContent = "Չհաջողվեց բեռնել դասացուցակը։";
-  }
-}
-
 async function testNotification(): Promise<void> {
   if (statusElement) statusElement.textContent = "Ծանուցումը ուղարկվում է…";
   try {
@@ -137,34 +119,94 @@ async function testNotification(): Promise<void> {
 updateCurrentTime();
 window.setInterval(updateCurrentTime, 15_000);
 
-async function initializeSchedule(): Promise<void> {
-  if (statusElement) statusElement.textContent = "Բեռնվում է…";
-  try {
-    const result = await loadSchedules();
-    hasSchedule = true;
-    renderSchedule();
-    if (sourceElement) {
-      sourceElement.dataset.source = result.source;
-      sourceElement.textContent = result.source === "cached" ? "Աղբյուր՝ պահված տարբերակ" : "";
-    }
-    try {
-      await invoke("update_schedule", { schedule });
-      if (statusElement) statusElement.textContent = result.warning ?? "";
-    } catch (error) {
-      if (statusElement) statusElement.textContent = `Դասացուցակը ցուցադրված է, բայց հիշեցումները չեն թարմացվել։ ${String(error)}`;
-    }
-  } catch (error) {
-    showScheduleError(error);
-    if (sourceElement) {
-      sourceElement.dataset.source = "error";
-      sourceElement.textContent = "Աղբյուր՝ սխալ";
-    }
-    if (statusElement) statusElement.textContent = `Դասացուցակը հասանելի չէ։ Ստուգեք կապը և վերագործարկեք ծրագիրը։ ${String(error)}`;
+const form = document.querySelector<HTMLFormElement>("#join-form")!;
+const codeInput = document.querySelector<HTMLInputElement>("#class-code")!;
+const previewElement = document.querySelector<HTMLElement>("#class-preview")!;
+const confirmButton = document.querySelector<HTMLButtonElement>("#join-confirm")!;
+const retryButton = document.querySelector<HTMLButtonElement>("#retry")!;
+const cancelButton = document.querySelector<HTMLButtonElement>("#join-cancel")!;
+const classElement = document.querySelector<HTMLElement>("#class-name")!;
+let uiRequest = 0;
+let saving = false;
+function showError(error: unknown): void {
+  if (!publication && dayNameElement) dayNameElement.textContent = "Դասացուցակ";
+  if (statusElement) statusElement.textContent = error instanceof Error ? error.message : `Չհաջողվեց բեռնել կամ պահպանել դասացուցակը։ Ստուգեք պահոցի հասանելիությունն ու ձևաչափը։ ${String(error)}`;
+  retryButton.hidden = false;
+  void invoke("show_main_window").catch(() => {});
+}
+function changed(view: ConnectionView): void {
+  stopSpeech();
+  publication = view.publication;
+  if (sourceElement) {
+    sourceElement.dataset.source = view.source;
+    sourceElement.textContent = view.source === "cached" ? "Օգտագործվում է պահված տարբերակը։" : "";
+  }
+  if (statusElement) statusElement.textContent = view.message ?? "";
+  retryButton.hidden = view.source === "online";
+  if (publication) {
+    classElement.textContent = `${publication.schoolName} · ${publication.className}`;
+    renderSchedule(); updateCurrentTime();
+  } else {
+    if (dayNameElement) dayNameElement.textContent = "Դասացուցակ";
+    scheduleListElement?.replaceChildren();
+    if (summaryElement) summaryElement.hidden = true;
+    updateCurrentTime();
   }
 }
-
+function openJoin(): void {
+  if (saving) return;
+  uiRequest++; connection?.cancel();
+  form.hidden = false; previewElement.textContent = ""; confirmButton.hidden = true;
+  if (!publication && dayNameElement) dayNameElement.textContent = "Դասացուցակ";
+  cancelButton.hidden = !connection?.selection;
+  codeInput.focus();
+  void invoke("show_main_window").catch(() => {});
+}
+async function refresh(): Promise<void> {
+  const request = ++uiRequest;
+  if (statusElement) statusElement.textContent = "Բեռնվում է…";
+  try {
+    if (!connection) {
+      const config = publicationConfig(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+      connection = new Connection(config, {
+        read: () => invoke("read_publication"),
+        begin: () => invoke("begin_publication_request"),
+        commit: (token, record, cached) => invoke("commit_publication", { token, record, cached }),
+      }, changed);
+      try { await connection.restore(); } catch (error) { connection = null; throw error; }
+    }
+    if (request !== uiRequest) return;
+    if (!connection.selection) { if (statusElement) statusElement.textContent = "Մուտքագրեք Teacher-ից ստացած դասարանի կոդը։"; openJoin(); return; }
+    confirmButton.hidden = true; previewElement.textContent = "";
+    await connection.refresh();
+  } catch (error) { if (request === uiRequest) showError(error); }
+}
+form.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!connection || saving) return;
+  const request = ++uiRequest;
+  if (statusElement) statusElement.textContent = "";
+  confirmButton.hidden = true; previewElement.textContent = "Ստուգվում է…";
+  try {
+    const candidate = await connection.preview(codeInput.value);
+    if (request !== uiRequest || !candidate) return;
+    previewElement.textContent = `${candidate.schoolName} · ${candidate.className}`;
+    confirmButton.hidden = false;
+  } catch (error) { if (request === uiRequest) { previewElement.textContent = ""; showError(error); } }
+});
+codeInput.addEventListener("input", () => { if (!saving) { uiRequest++; connection?.cancel(); confirmButton.hidden = true; previewElement.textContent = ""; } });
+confirmButton.addEventListener("click", async () => {
+  if (!connection || saving) return;
+  saving = true; form.inert = true;
+  try { if (await connection.confirm()) form.hidden = true; }
+  catch (error) { showError(new Error(`Չհաջողվեց պահպանել միացումը։ ${String(error)}`)); }
+  finally { saving = false; form.inert = false; }
+});
+cancelButton.addEventListener("click", () => { uiRequest++; connection?.cancel(); form.hidden = true; });
+document.querySelector("#change-class")?.addEventListener("click", openJoin);
+retryButton.addEventListener("click", () => { if (!saving) void refresh(); });
 void initializeTray()
   .catch((error) => console.error("Tray listeners:", error))
   .then(initializeSettings)
-  .then(initializeSchedule);
+  .then(refresh);
 notificationButton?.addEventListener("click", () => void testNotification());

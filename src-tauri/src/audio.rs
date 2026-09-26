@@ -1,13 +1,20 @@
 use crate::settings::{Settings, SettingsState};
 use rodio::{buffer::SamplesBuffer, OutputStreamBuilder, Sink};
 use std::{
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex,
+    },
     thread,
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, Manager};
 
 static PLAYBACK: Mutex<()> = Mutex::new(());
+static SOURCE_GENERATION: AtomicU64 = AtomicU64::new(0);
+pub fn cancel_pending() {
+    SOURCE_GENERATION.fetch_add(1, Ordering::SeqCst);
+}
 const BELL: &[u8] = include_bytes!("../assets/kakavik.wav");
 
 fn enabled(settings: &Settings) -> bool {
@@ -25,14 +32,21 @@ fn bell_samples() -> Vec<f32> {
         .collect()
 }
 
-fn play_native() -> Result<(), String> {
+fn play_native(generation: u64) -> Result<(), String> {
     let stream = OutputStreamBuilder::open_default_stream()
         .map_err(|error| format!("Could not open audio output: {error}"))?;
     let sink = Sink::connect_new(stream.mixer());
+    if generation != SOURCE_GENERATION.load(Ordering::SeqCst) {
+        return Ok(());
+    }
     sink.append(SamplesBuffer::new(1, 22_050, bell_samples()));
     // A disconnected or stalled output must not keep the playback lock forever.
     let deadline = Instant::now() + Duration::from_secs(5);
     while !sink.empty() {
+        if generation != SOURCE_GENERATION.load(Ordering::SeqCst) {
+            sink.stop();
+            return Ok(());
+        }
         if Instant::now() >= deadline {
             sink.stop();
             return Err("Audio output timed out.".into());
@@ -42,30 +56,36 @@ fn play_native() -> Result<(), String> {
     Ok(())
 }
 
+fn play(app: AppHandle, generation: u64) -> Result<(), String> {
+    let Ok(_guard) = PLAYBACK.try_lock() else {
+        return Ok(());
+    };
+    if generation != SOURCE_GENERATION.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    let settings = app
+        .state::<SettingsState>()
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
+    if !enabled(&settings) {
+        return Ok(());
+    }
+    play_native(generation)
+}
 #[tauri::command]
 pub async fn play_bell(app: AppHandle) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let Ok(_guard) = PLAYBACK.try_lock() else {
-            return Ok(());
-        };
-        let settings = app
-            .state::<SettingsState>()
-            .0
-            .lock()
-            .map_err(|error| error.to_string())?
-            .clone();
-        if !enabled(&settings) {
-            return Ok(());
-        }
-        play_native()
-    })
-    .await
-    .map_err(|error| error.to_string())?
+    let generation = SOURCE_GENERATION.load(Ordering::SeqCst);
+    tauri::async_runtime::spawn_blocking(move || play(app, generation))
+        .await
+        .map_err(|e| e.to_string())?
 }
-
 pub fn ring(app: AppHandle) {
-    tauri::async_runtime::spawn(async move {
-        if let Err(error) = play_bell(app).await {
+    // Capture before spawning, so queued playback cannot outlive its class.
+    let generation = SOURCE_GENERATION.load(Ordering::SeqCst);
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(error) = play(app, generation) {
             eprintln!("Could not play bell: {error}");
         }
     });

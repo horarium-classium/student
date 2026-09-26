@@ -25,7 +25,24 @@ pub struct SettingsState(pub Mutex<Settings>);
 
 pub fn read(path: &Path) -> Result<Settings, String> {
     match fs::read_to_string(path) {
-        Ok(data) => serde_json::from_str(&data).map_err(|error| error.to_string()),
+        Ok(data) => {
+            let value: serde_json::Value =
+                serde_json::from_str(&data).map_err(|e| e.to_string())?;
+            let object = value.as_object().ok_or("Invalid settings")?;
+            if object.keys().any(|key| {
+                ![
+                    "notificationsEnabled",
+                    "soundEnabled",
+                    "speechEnabled",
+                    "autostartEnabled",
+                    "startMinimized",
+                ]
+                .contains(&key.as_str())
+            }) {
+                return Err("Unknown settings format; file preserved".into());
+            }
+            serde_json::from_value(value).map_err(|error| error.to_string())
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Settings::default()),
         Err(error) => Err(error.to_string()),
     }
@@ -33,6 +50,12 @@ pub fn read(path: &Path) -> Result<Settings, String> {
 
 #[tauri::command]
 pub fn get_settings(app: AppHandle) -> Result<Settings, String> {
+    let path = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("settings.json");
+    read(&path)?;
     let state = app.state::<SettingsState>();
     let settings = state.0.lock().map_err(|error| error.to_string())?;
     let updated = settings.clone();
@@ -57,6 +80,7 @@ pub fn set_setting(app: AppHandle, key: String, enabled: bool) -> Result<Setting
         .app_data_dir()
         .map_err(|error| error.to_string())?
         .join("settings.json");
+    read(&path)?; // Do not overwrite corrupt or newer settings with defaults.
     write_json(
         &path,
         &serde_json::to_string_pretty(&updated).map_err(|error| error.to_string())?,
@@ -111,5 +135,19 @@ mod tests {
             settings
         );
         assert!(serde_json::from_str::<Settings>("{\"soundEnabled\":\"yes\"}").is_err());
+    }
+    #[test]
+    fn newer_settings_and_legacy_preferences_are_preserved() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        let newer = r#"{"version":99,"soundEnabled":false}"#;
+        fs::write(&path, newer).unwrap();
+        assert!(read(&path).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), newer);
+        fs::write(&path, r#"{"notificationsEnabled":false,"soundEnabled":false,"speechEnabled":true,"startMinimized":false}"#).unwrap();
+        let settings = read(&path).unwrap();
+        assert!(!settings.notifications_enabled);
+        assert!(!settings.sound_enabled);
+        assert!(settings.speech_enabled);
     }
 }

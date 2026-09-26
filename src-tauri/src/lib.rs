@@ -1,26 +1,31 @@
-use scheduler::{start_scheduler, update_schedule, SchedulerState};
-use std::{collections::HashMap, sync::Mutex};
+use scheduler::{start_scheduler, Runtime, SchedulerState};
+use std::sync::Mutex;
 use tauri::{Manager, WindowEvent};
 use tauri_plugin_autostart::ManagerExt;
 
 mod audio;
 mod model;
+mod publication;
 mod scheduler;
 mod settings;
 mod storage;
 mod tray;
 
+#[tauri::command]
+fn show_main_window(app: tauri::AppHandle) {
+    tray::open(&app);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(SchedulerState {
-            schedule: Mutex::new(HashMap::new()),
-        })
+        .manage(SchedulerState(Mutex::new(Runtime::default())))
         .invoke_handler(tauri::generate_handler![
-            update_schedule,
             audio::play_bell,
-            storage::read_schedule_cache,
-            storage::write_schedule_cache,
+            publication::read_publication,
+            publication::begin_publication_request,
+            publication::commit_publication,
+            show_main_window,
             settings::get_settings,
             settings::set_setting
         ])
@@ -57,7 +62,11 @@ pub fn run() {
                     false
                 }
             };
-            if !tray_available {
+            let configured = publication::read(&app.path().app_data_dir()?.join(publication::FILE))
+                .ok()
+                .flatten()
+                .is_some();
+            if !tray_available || !configured {
                 if let Some(window) = app.get_webview_window("main") {
                     window.show()?;
                 }

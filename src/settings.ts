@@ -27,7 +27,7 @@ export async function initializeSettings(): Promise<void> {
   try {
     await loadSettings();
   } catch (error) {
-    const status = document.querySelector<HTMLElement>("#status");
+    const status = document.querySelector<HTMLElement>("#settings-status");
     if (status) status.textContent = `Չհաջողվեց բեռնել կարգավորումները։ ${String(error)}`;
   }
 }

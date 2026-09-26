@@ -1,10 +1,12 @@
 import { listen } from "@tauri-apps/api/event";
-import { speak, type SpeechNotification } from "./speech";
+import { stopSpeech, speak, type SpeechNotification } from "./speech";
 import { applySettings, settings, type Settings } from "./settings";
 
 export async function initializeTray(): Promise<void> {
-  await listen<SpeechNotification>("speak-notification", ({ payload }) => {
-    speak(payload, settings.notificationsEnabled && settings.speechEnabled);
+  let source = "";
+  await listen<string>("publication-source-changed", ({ payload }) => { source = payload; stopSpeech(); });
+  await listen<SpeechNotification & { source: string }>("speak-notification", ({ payload }) => {
+    if (payload.source === source) speak(payload, settings.notificationsEnabled && settings.speechEnabled);
   });
   await listen<Settings>("settings-changed", ({ payload }) => {
     applySettings(payload);
