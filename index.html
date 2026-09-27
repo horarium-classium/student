@@ -15,7 +15,15 @@
         <img class="brand-mark" src="/src/assets/horarium.svg" alt="" aria-hidden="true" />
         <div class="header-copy">
           <p class="eyebrow">HORARIUM CLASSIUM</p>
-          <h1 id="day-name">Բեռնվում է…</h1>
+          <div class="day-navigation" role="group" aria-label="Դասացուցակի օրը">
+            <h1 id="day-name">Բեռնվում է…</h1>
+            <button id="previous-day" class="day-navigation-button" type="button" aria-label="Ցուցադրել նախորդ օրվա դասացուցակը" title="Նախորդ օրը" hidden>
+              <span aria-hidden="true">◄</span>
+            </button>
+            <button id="next-day" class="day-navigation-button" type="button" aria-label="Ցուցադրել հաջորդ օրվա դասացուցակը" title="Հաջորդ օրը" hidden>
+              <span aria-hidden="true">►</span>
+            </button>
+          </div>
         </div>
         <div class="header-class">
           <span id="class-name" class="class-name"></span>
@@ -39,6 +47,10 @@
       <p id="status" role="status" aria-live="polite"></p>
       <p id="lesson-summary" class="lesson-summary" aria-live="polite" hidden></p>
       <div id="schedule-list" class="schedule-list"></div>
+      <footer class="app-footer">
+        <span>© Արմեն Բադալյան, <span id="copyright-year"></span></span>
+        <span id="app-version" aria-label="Հավելվածի տարբերակը"></span>
+      </footer>
     </main>
   </body>
 </html>

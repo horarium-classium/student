@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { load } from "./load.mjs";
-const { validateSchedule } = await import(await load("schedule"));
+const { getScheduleDateWeekday, shiftScheduleDate, validateSchedule } = await import(await load("schedule"));
 
 test("invalid times, names, intervals and overlaps are rejected", () => {
   const lesson = (start, end, name = "Դաս") => ({ start, end, lesson: name });
@@ -31,4 +31,12 @@ test("days, empty schedules, sorting and adjacency", () => {
   assert.deepEqual(validateSchedule({ Երկուշաբթի: lessons, Երեքշաբթի: [] }), {
     Երկուշաբթի: [{ ...lessons[1] }, { ...lessons[0], lesson: "B" }], Երեքշաբթի: [],
   });
+});
+
+test("schedule dates move across month and year boundaries", () => {
+  assert.equal(shiftScheduleDate("2026-01-01", -1), "2025-12-31");
+  assert.equal(shiftScheduleDate("2026-02-28", 1), "2026-03-01");
+  assert.equal(shiftScheduleDate("2024-02-28", 1), "2024-02-29");
+  assert.equal(getScheduleDateWeekday("2026-09-27"), 7);
+  assert.equal(getScheduleDateWeekday("2026-09-28"), 1);
 });

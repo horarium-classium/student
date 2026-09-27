@@ -5,14 +5,20 @@ import { publicationConfig, type Publication } from "./publication";
 import { schoolTime, schoolSummary, lessonProgress, lessonInterval } from "./school-time";
 import { stopSpeech } from "./speech";
 import { invoke } from "@tauri-apps/api/core";
-import { getDayName } from "./schedule";
+import { getDayName, getScheduleDateWeekday, shiftScheduleDate } from "./schedule";
 import { initializeTray } from "./tray";
 import { initializeSettings } from "./settings";
 import { notify } from "./notifications";
 
 const dayNameElement = document.querySelector<HTMLElement>("#day-name");
 const scheduleListElement = document.querySelector<HTMLElement>("#schedule-list");
+const previousDayButton = document.querySelector<HTMLButtonElement>("#previous-day");
+const nextDayButton = document.querySelector<HTMLButtonElement>("#next-day");
+const copyrightYearElement = document.querySelector<HTMLElement>("#copyright-year");
+const versionElement = document.querySelector<HTMLElement>("#app-version");
 const notificationButton = document.querySelector<HTMLButtonElement>("#notification-test");
+if (copyrightYearElement) copyrightYearElement.textContent = String(new Date().getFullYear());
+if (versionElement) versionElement.textContent = __APP_VERSION__;
 let publication: Publication | null = null;
 let connection: Connection | null = null;
 let initializingConnection: Promise<Connection> | null = null;
@@ -22,7 +28,8 @@ const getTodayLessons = (now = new Date()) => {
   return lessons.filter(lesson => lessonInterval(lesson, now, publication!.timezone));
 };
 const timezone = () => publication?.timezone ?? "UTC";
-let renderedDay = "";
+let selectedDate: string | null = null;
+let renderedDate = "";
 const summaryElement = document.querySelector<HTMLElement>("#lesson-summary");
 const sourceElement = document.querySelector<HTMLElement>("#schedule-source");
 
@@ -31,15 +38,24 @@ const statusElement = document.querySelector<HTMLElement>("#status");
 function updateScheduleTime(): void {
   const now = new Date();
   if (publication) {
-    if (renderedDay !== schoolTime(now, timezone()).date) renderSchedule();
-    if (summaryElement) summaryElement.textContent = schoolSummary(getTodayLessons(now), now, timezone());
+    const today = schoolTime(now, timezone()).date;
+    if (!selectedDate && renderedDate !== today) renderSchedule();
+    if (summaryElement && (selectedDate ?? today) === today) {
+      const lessons = getTodayLessons(now);
+      summaryElement.hidden = lessons.length === 0;
+      summaryElement.textContent = schoolSummary(lessons, now, timezone());
+    }
   }
   updateCurrentLesson(now);
 }
 
 function updateCurrentLesson(now: Date): void {
+  const today = publication ? schoolTime(now, timezone()).date : "";
+  const viewingToday = publication !== null && (selectedDate ?? today) === today;
   document.querySelectorAll<HTMLTableRowElement>(".schedule-table tbody tr").forEach((row) => {
-    const progress = lessonProgress({ start: row.dataset.start ?? "", end: row.dataset.end ?? "", lesson: "" }, now, timezone());
+    const progress = viewingToday
+      ? lessonProgress({ start: row.dataset.start ?? "", end: row.dataset.end ?? "", lesson: "" }, now, timezone())
+      : undefined;
     const isCurrent = progress !== undefined;
     row.classList.toggle("current-lesson", isCurrent);
     row.setAttribute("aria-current", isCurrent ? "time" : "false");
@@ -52,21 +68,27 @@ function updateCurrentLesson(now: Date): void {
 }
 
 function renderSchedule(): void {
-  if (!dayNameElement || !scheduleListElement) return;
+  if (!publication || !dayNameElement || !scheduleListElement) return;
 
-  const today = new Date();
-  const lessons = getTodayLessons(today);
-  renderedDay = schoolTime(today, timezone()).date;
+  const now = new Date();
+  const today = schoolTime(now, timezone()).date;
+  const date = selectedDate ?? today;
+  const viewingToday = date === today;
+  const weekday = getScheduleDateWeekday(date);
+  const lessons = viewingToday
+    ? getTodayLessons(now)
+    : publication.schedule[getDayName(weekday)] ?? [];
+  renderedDate = date;
   if (summaryElement) {
-    summaryElement.hidden = lessons.length === 0;
-    summaryElement.textContent = schoolSummary(lessons, today, timezone());
+    summaryElement.hidden = !viewingToday || lessons.length === 0;
+    summaryElement.textContent = viewingToday ? schoolSummary(getTodayLessons(now), now, timezone()) : "";
   }
-  dayNameElement.textContent = getDayName(schoolTime(today, timezone()).weekday);
+  dayNameElement.textContent = getDayName(weekday);
 
   if (lessons.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty-day";
-    empty.textContent = "Այսօր դասեր չկան։";
+    empty.textContent = viewingToday ? "Այսօր դասեր չկան։" : "Այս օրը դասեր չկան։";
     scheduleListElement.replaceChildren(empty);
     return;
   }
@@ -93,7 +115,15 @@ function renderSchedule(): void {
 
   table.append(body);
   scheduleListElement.replaceChildren(table);
-  updateCurrentLesson(today);
+  updateCurrentLesson(now);
+}
+
+function showAdjacentDay(days: number): void {
+  if (!publication) return;
+  const today = schoolTime(new Date(), timezone()).date;
+  const nextDate = shiftScheduleDate(selectedDate ?? today, days);
+  selectedDate = nextDate === today ? null : nextDate;
+  renderSchedule();
 }
 
 async function testNotification(): Promise<void> {
@@ -141,6 +171,8 @@ function changed(view: ConnectionView): void {
   retryButton.hidden = view.source === "online";
   classCodeButton.textContent = publication?.joinCode ?? connection?.selection?.joinCode ?? "Միանալ";
   classElement.textContent = publication?.className ?? "";
+  if (previousDayButton) previousDayButton.hidden = !publication;
+  if (nextDayButton) nextDayButton.hidden = !publication;
   if (publication) {
     renderSchedule(); updateScheduleTime();
   } else {
@@ -217,6 +249,8 @@ confirmButton.addEventListener("click", async () => {
 });
 cancelButton.addEventListener("click", () => { uiRequest++; connection?.cancel(); form.hidden = true; });
 document.querySelector("#change-class")?.addEventListener("click", openJoin);
+previousDayButton?.addEventListener("click", () => showAdjacentDay(-1));
+nextDayButton?.addEventListener("click", () => showAdjacentDay(1));
 retryButton.addEventListener("click", () => { if (!saving) void refresh(); });
 void listen("schedule-refresh-tick", () => { void autoRefresh.tick(); })
   .catch(error => console.error("Schedule refresh listener:", error));

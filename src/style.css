@@ -7,12 +7,18 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 15% 0%, #d7e8e4 0, transparent 35%), #e9f0ef; }
+body { position: relative; margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 15% 0%, #d7e8e4 0, transparent 35%), #e9f0ef; }
 .container { width: 100%; margin: 0; padding: 28px; }
 .page-header { display: flex; align-items: center; gap: 16px; padding: 24px; color: #f5fbfa; background: #173d45; border-radius: 18px; box-shadow: 0 18px 40px rgba(23, 61, 69, .18); animation: rise-in .45s ease-out both; }
 .brand-mark { display: block; width: 48px; height: 48px; flex: 0 0 48px; object-fit: contain; }
 .header-copy { min-width: 0; flex: 1; }
 .eyebrow { margin: 0 0 5px; color: #a9d5cc; font-size: 10px; font-weight: 700; letter-spacing: .14em; }
+.day-navigation { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.day-navigation h1 { min-width: 0; }
+.day-navigation-button { display: grid; width: 18px; height: 22px; flex: 0 0 18px; place-items: center; margin: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; color: #a9d5cc; font-family: Arial, sans-serif; font-size: 12px; line-height: 1; }
+.day-navigation-button:hover { background: transparent; color: #fff; }
+.day-navigation-button:active { transform: translateY(1px); }
+.day-navigation-button:focus-visible { outline-color: #7bd3a6; }
 h1 { margin: 0; font-family: Georgia, serif; font-size: 31px; font-weight: 600; letter-spacing: 0; }
 .schedule-list { overflow: hidden; margin-top: 22px; border: 1px solid #dce6e4; border-radius: 12px; background: rgba(255, 255, 255, .82); box-shadow: 0 12px 30px rgba(31, 60, 63, .08); animation: rise-in .5s .08s ease-out both; }
 .schedule-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -35,8 +41,15 @@ h1 { margin: 0; font-family: Georgia, serif; font-size: 31px; font-weight: 600; 
   .page-header { align-items: flex-start; }
   .brand-mark { width: 42px; height: 42px; flex-basis: 42px; }
   h1 { font-size: 26px; }
+  .day-navigation { gap: 7px; }
+  .day-navigation-button { width: 17px; height: 21px; flex-basis: 17px; font-size: 11px; }
   .schedule-table th:first-child, .schedule-table td:first-child { width: 116px; }
   .schedule-table th, .schedule-table td { padding: 12px 11px; }
+}
+@media (max-width: 380px) {
+  .page-header { flex-wrap: wrap; }
+  .header-copy { order: 3; flex-basis: 100%; }
+  .header-class { margin-left: auto; }
 }
 #status { font-size: 12px; line-height: 1.6; color: #496366; overflow-wrap: anywhere; }
 
@@ -45,6 +58,23 @@ h1 { margin: 0; font-family: Georgia, serif; font-size: 31px; font-weight: 600; 
 .source[data-source="error"] { color: #9a3939; }
 .lesson-summary { padding: 12px; border-left: 3px solid #3d9b6b; border-radius: 6px; background: #dceee4; font-size: 13px; line-height: 1.7; }
 .empty-day { padding: 22px 14px; text-align: center; font-size: 14px; }
+.app-footer {
+  position: absolute;
+  right: 30px;
+  bottom: 12px;
+  left: 30px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #496366;
+  font-size: 10px;
+  line-height: 1.6;
+  pointer-events: none;
+}
+.app-footer span:last-child { text-align: right; }
+@media (max-width: 520px) {
+  .app-footer { right: 16px; bottom: 10px; left: 16px; }
+}
 #status:empty, #lesson-summary:empty, #schedule-source:empty { display: none; }
 
 [hidden] { display: none !important; }

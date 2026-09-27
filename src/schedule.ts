@@ -64,3 +64,13 @@ export function validateSchedule(value: unknown): Schedule {
 export function getDayName(day: number): string {
   return dayNames[day] ?? "Դասացուցակ";
 }
+
+export function shiftScheduleDate(date: string, days: number): string {
+  const shifted = new Date(`${date}T12:00:00Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().slice(0, 10);
+}
+
+export function getScheduleDateWeekday(date: string): number {
+  return new Date(`${date}T12:00:00Z`).getUTCDay() || 7;
+}
