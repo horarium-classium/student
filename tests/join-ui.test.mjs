@@ -37,7 +37,7 @@ async function ui({ restore = async () => {}, configError, selection = null, ref
     },
     listen: async (name, callback) => { events[name] = callback; },
     Connection, publicationConfig:()=>{if(configError) throw configError; return {};},
-    buildEnv:{}, __APP_VERSION__:'0.8.3', invoke:async(name)=>{invocations.push(name);}, stopSpeech(){}, console, Error,
+    buildEnv:{}, __APP_VERSION__:'test', invoke:async(name)=>{invocations.push(name);}, stopSpeech(){}, console, Error,
     initializeTray:async()=>{},initializeSettings:async()=>{},
   });
   await new Promise(resolve=>setImmediate(resolve));
