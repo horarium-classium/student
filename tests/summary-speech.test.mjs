@@ -9,21 +9,6 @@ async function load(name) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`);
 }
 
-test("summary handles empty, upcoming, current, adjacent and finished lessons", async () => {
-  const { schoolSummary } = await load("school-time");
-  const lessonSummary = (lessons, now) => schoolSummary(lessons, now, "UTC");
-  const lessons = [
-    { start: "09:00", end: "10:00", lesson: "Մաթեմատիկա" },
-    { start: "10:00", end: "11:00", lesson: "Ֆիզիկա" },
-  ];
-  const at = (hour, minute = 0) => new Date(Date.UTC(2026, 8, 21, hour, minute));
-  assert.equal(lessonSummary([], at(8)), "Այսօր դասեր չկան։");
-  assert.equal(lessonSummary([...lessons].reverse(), at(8)), "Հաջորդ դասը՝ Մաթեմատիկա — 09:00");
-  assert.equal(lessonSummary(lessons, at(9)), "Հիմա՝ Մաթեմատիկա · մինչև 10:00");
-  assert.equal(lessonSummary(lessons, at(10)), "Հիմա՝ Ֆիզիկա · մինչև 11:00");
-  assert.equal(lessonSummary(lessons, at(11)), "");
-});
-
 test("speech prefers Armenian, falls back to English and handles delayed voices", async (t) => {
   const { speak, stopSpeech } = await load("speech");
   const oldWindow = globalThis.window;

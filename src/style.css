@@ -56,7 +56,6 @@ h1 { margin: 0; font-family: Georgia, serif; font-size: 31px; font-weight: 600; 
 .source { margin: 10px 0 0; font-size: 11px; line-height: 1.6; color: #496366; }
 .source[data-source="cached"] { color: #875a26; }
 .source[data-source="error"] { color: #9a3939; }
-.lesson-summary { padding: 12px; border-left: 3px solid #3d9b6b; border-radius: 6px; background: #dceee4; font-size: 13px; line-height: 1.7; }
 .empty-day { padding: 22px 14px; text-align: center; font-size: 14px; }
 .app-footer {
   position: absolute;
@@ -75,7 +74,7 @@ h1 { margin: 0; font-family: Georgia, serif; font-size: 31px; font-weight: 600; 
 @media (max-width: 520px) {
   .app-footer { right: 16px; bottom: 10px; left: 16px; }
 }
-#status:empty, #lesson-summary:empty, #schedule-source:empty { display: none; }
+#status:empty, #schedule-source:empty { display: none; }
 
 [hidden] { display: none !important; }
 button, input { font: inherit; border: 1px solid #afc5c1; border-radius: 6px; padding: 9px 10px; }

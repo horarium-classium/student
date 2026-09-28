@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { ScheduleRefresh } from "./refresh";
 import { Connection, type ConnectionView } from "./connection";
 import { publicationConfig, type Publication } from "./publication";
-import { schoolTime, schoolSummary, lessonProgress, lessonInterval } from "./school-time";
+import { schoolTime, lessonProgress, lessonInterval } from "./school-time";
 import { stopSpeech } from "./speech";
 import { invoke } from "@tauri-apps/api/core";
 import { getDayName, getScheduleDateWeekday, shiftScheduleDate } from "./schedule";
@@ -30,7 +30,6 @@ const getTodayLessons = (now = new Date()) => {
 const timezone = () => publication?.timezone ?? "UTC";
 let selectedDate: string | null = null;
 let renderedDate = "";
-const summaryElement = document.querySelector<HTMLElement>("#lesson-summary");
 const sourceElement = document.querySelector<HTMLElement>("#schedule-source");
 
 const statusElement = document.querySelector<HTMLElement>("#status");
@@ -40,11 +39,6 @@ function updateScheduleTime(): void {
   if (publication) {
     const today = schoolTime(now, timezone()).date;
     if (!selectedDate && renderedDate !== today) renderSchedule();
-    if (summaryElement && (selectedDate ?? today) === today) {
-      const lessons = getTodayLessons(now);
-      summaryElement.hidden = lessons.length === 0;
-      summaryElement.textContent = schoolSummary(lessons, now, timezone());
-    }
   }
   updateCurrentLesson(now);
 }
@@ -79,10 +73,6 @@ function renderSchedule(): void {
     ? getTodayLessons(now)
     : publication.schedule[getDayName(weekday)] ?? [];
   renderedDate = date;
-  if (summaryElement) {
-    summaryElement.hidden = !viewingToday || lessons.length === 0;
-    summaryElement.textContent = viewingToday ? schoolSummary(getTodayLessons(now), now, timezone()) : "";
-  }
   dayNameElement.textContent = getDayName(weekday);
 
   if (lessons.length === 0) {
@@ -178,7 +168,6 @@ function changed(view: ConnectionView): void {
   } else {
     if (dayNameElement) dayNameElement.textContent = "Դասացուցակ";
     scheduleListElement?.replaceChildren();
-    if (summaryElement) summaryElement.hidden = true;
     updateScheduleTime();
   }
 }
