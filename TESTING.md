@@ -63,7 +63,7 @@ OS/version/architecture, build revision և ամսաթիվ՝ **չստուգված
 - [ ] System tray՝ Close → hide, Open, կարգավորումների անջատիչներ, Quit։
 - [ ] Launch at login՝ ավտոմատ գրանցում առաջին և հաջորդ մեկնարկներին, հաջորդ login-ից գործարկում, նաև հին false կարգավորումներով։
 - [ ] Start minimized՝ սովորական launch/login առանց window flash-ի, tray-ից վերադարձ։
-- [ ] Sleep/wake՝ բաց թողնված start/end և կեսգիշեր, յուրաքանչյուր event միայն մեկ անգամ։
+- [ ] Sleep/wake՝ բաց թողնված start/end-ը չեն ցուցադրվում, ընթացող դասի հաղորդումը՝ առավելագույնը մեկ անգամ, ներառյալ կեսգիշերը։
 - [ ] Sound՝ տեսանելի/թաքնված պատուհան, on/off, համաժամանակյա զանգերի միավորում, volume mixer, audio device-ի անջատում և հաջորդ զանգի վերականգնում։
 - [ ] Speech՝ WebView2, հայերեն voice-ի առկայությամբ և առանց դրա, speech-disabled և ընթացիկ խոսքի cancellation։
 - [ ] Notifications-disabled՝ նոր native notification, զանգ և խոսք չեն գործարկվում։
@@ -79,7 +79,7 @@ OS/version/architecture, build revision և ամսաթիվ՝ **չստուգված
 - [ ] Menu bar tray՝ Close → hide, Open, կարգավորումների անջատիչներ, Quit։ Dock reopen-ը վերադարձնում է պատուհանը։
 - [ ] Launch at login՝ LaunchAgent ավտոմատ գրանցում և logout/login-ից հետո փաստացի գործարկում։
 - [ ] Start minimized՝ launch/login առանց window flash-ի, tray և Dock reopen։
-- [ ] Sleep/wake՝ missed start/end, կեսգիշեր, կրկնությունների բացակայություն։
+- [ ] Sleep/wake՝ missed start/end-ը չեն ցուցադրվում, ընթացող դասի հաղորդումը՝ առավելագույնը մեկ անգամ, ներառյալ կեսգիշերը։
 - [ ] Sound՝ native output, on/off, թաքնված պատուհան, output device-ի փոփոխություն/անջատում և վերականգնում։
 - [ ] Speech՝ WKWebView, հայերեն voice-ի առկայությամբ և առանց դրա, hidden window և cancellation։
 - [ ] Notifications-disabled՝ բոլոր նոր ազդանշաններն անջատված են։
@@ -96,7 +96,7 @@ Distro/version, desktop session (GNOME/XFCE), X11/Wayland, architecture, revisio
 - [ ] Tray-ի ստեղծման սխալի դեպքում app-ը մնում է տեսանելի․ Close-ը չի թաքցնում այն անհասանելի վիճակում։ Ստուգել նաև panel-ի բացակայության սահմանափակումը։
 - [ ] Launch at login՝ desktop autostart entry-ի ավտոմատ գրանցում, հաջորդ graphical login, AppImage-ի կայուն ուղի։
 - [ ] Start minimized՝ միայն գործող tray-ով, login և սովորական launch, menu-ից վերականգնում։
-- [ ] Sleep/wake՝ missed start/end, կեսգիշեր և duplicate suppression։
+- [ ] Sleep/wake՝ missed start/end-ը չեն ցուցադրվում, ընթացող դասի հաղորդումը՝ առավելագույնը մեկ անգամ, ներառյալ կեսգիշերը։
 - [ ] Sound՝ ALSA/default output՝ տվյալ համակարգի PulseAudio/PipeWire ինտեգրմամբ, on/off, թաքնված պատուհան, սարքի փոփոխություն/անջատում և վերականգնում։
 - [ ] Speech՝ WebKitGTK API/voice availability։ Հայերեն voice-ի բացակայության դեպքում crash չկա։ Առկայության դեպքում՝ hidden window և cancellation։
 - [ ] Notifications-disabled՝ նոր notification, զանգ և խոսք չեն գործարկվում։

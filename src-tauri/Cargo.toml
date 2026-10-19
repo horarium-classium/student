@@ -1,6 +1,6 @@
 [package]
 name = "horarium"
-version = "0.8.5"
+version = "0.8.6"
 description = "Դասացուցակ desktop schedule application"
 authors = ["you"]
 edition = "2021"

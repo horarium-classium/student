@@ -123,6 +123,8 @@ struct Scheduler {
     notified_events: HashSet<(NaiveDate, String, String, String, bool)>,
 }
 
+const DELIVERY_WINDOW: Duration = Duration::seconds(10);
+
 impl Scheduler {
     #[cfg(test)]
     fn tick(&mut self, schedule: &WeeklySchedule, now: NaiveDateTime) -> Vec<SpeechNotification> {
@@ -143,14 +145,7 @@ impl Scheduler {
                 .retain(|key| key.0 >= today && key.0 <= tomorrow);
         }
         let mut messages = Vec::new();
-        let mut dates = Vec::new();
-        if let Some(last) =
-            previous.filter(|last| last.with_timezone(&timezone).date_naive() < today)
-        {
-            dates.push(last.with_timezone(&timezone).date_naive());
-        }
-        dates.extend([today, tomorrow]);
-        for date in dates {
+        for date in [today, tomorrow] {
             let Some(lessons) = schedule.get(day_name(date.weekday())) else {
                 continue;
             };
@@ -190,9 +185,10 @@ impl Scheduler {
                         },
                     });
                 }
-                // Catch up missed ends on the last observed day and today, including midnight.
+                // Missed ends are skipped after sleep or a delayed scheduler tick.
                 if date <= today
-                    && previous.is_some_and(|last| last < end && now >= end)
+                    && now >= end
+                    && now < end + DELIVERY_WINDOW
                     && self.notified_events.insert(key(true))
                 {
                     if date < today {
@@ -346,13 +342,12 @@ mod tests {
     }
 
     #[test]
-    fn sleep_wake_catches_start_and_end_including_adjacent_next_lesson() {
+    fn sleep_wake_skips_stale_end_but_reports_current_lesson() {
         let mut engine = Scheduler::default();
         engine.tick(&schedule(), at(21, 8, 0));
         let messages = engine.tick(&schedule(), at(21, 10, 15));
-        assert_eq!(messages.len(), 2);
-        assert!(messages[0].body.contains("ավարտվեց։ Հաջորդը՝ «Ֆիզիկա»"));
-        assert!(messages[1].body.contains("արդեն սկսվել է"));
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].kind, "started");
         assert!(engine.tick(&schedule(), at(21, 10, 16)).is_empty());
         assert_eq!(engine.tick(&schedule(), at(21, 11, 0)).len(), 1);
         assert!(engine.tick(&schedule(), at(21, 11, 1)).is_empty());
@@ -361,7 +356,7 @@ mod tests {
     #[test]
     fn new_day_cleans_keys_and_does_not_replay_old_days() {
         let mut engine = Scheduler::default();
-        engine.tick(&schedule(), at(21, 9, 30));
+        engine.tick(&schedule(), at(21, 8, 59));
         assert!(!engine.notified_events.is_empty());
         engine.tick(&schedule(), at(21, 11, 30));
         assert!(engine.tick(&schedule(), at(22, 9, 30)).is_empty());
@@ -406,18 +401,15 @@ mod tests {
     }
 
     #[test]
-    fn wake_on_new_day_catches_today_but_not_previous_day() {
+    fn wake_on_new_day_skips_missed_notifications() {
         let mut engine = Scheduler::default();
         engine.tick(&schedule(), at(20, 23, 0));
         let messages = engine.tick(&schedule(), at(21, 11, 30));
-        assert_eq!(messages.len(), 2);
-        assert!(messages
-            .iter()
-            .all(|message| message.body.contains("ավարտվեց")));
+        assert!(messages.is_empty());
         assert!(engine.tick(&schedule(), at(21, 11, 31)).is_empty());
     }
     #[test]
-    fn sleep_across_midnight_reports_missed_end_once_and_cleans_old_keys() {
+    fn sleep_across_midnight_skips_missed_end() {
         let schedule = [(
             "Երկուշաբթի".into(),
             vec![Lesson {
@@ -430,8 +422,7 @@ mod tests {
         let mut engine = Scheduler::default();
         engine.tick(&schedule, at(21, 23, 30));
         let messages = engine.tick(&schedule, at(22, 0, 1));
-        assert_eq!(messages.len(), 1);
-        assert!(messages[0].body.contains("2026-09-21"));
+        assert!(messages.is_empty());
         assert!(engine.notified_events.is_empty());
         assert!(engine.tick(&schedule, at(22, 0, 2)).is_empty());
     }
@@ -473,8 +464,8 @@ mod tests {
             engine
                 .tick_zoned(&repeated, fall.and_hms_opt(6, 15, 0).unwrap().and_utc(), ny)
                 .len(),
-            1
-        ); // missed end, no repeated start
+            0
+        ); // missed end and past start are both skipped
         assert!(engine
             .tick_zoned(&repeated, fall.and_hms_opt(6, 30, 0).unwrap().and_utc(), ny)
             .is_empty());
