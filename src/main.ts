@@ -9,6 +9,7 @@ import { getDayName, getScheduleDateWeekday, shiftScheduleDate } from "./schedul
 import { initializeTray } from "./tray";
 import { initializeSettings } from "./settings";
 import { notify } from "./notifications";
+import "./updater";
 
 const dayNameElement = document.querySelector<HTMLElement>("#day-name");
 const scheduleListElement = document.querySelector<HTMLElement>("#schedule-list");

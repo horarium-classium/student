@@ -16,9 +16,19 @@ fn show_main_window(app: tauri::AppHandle) {
     tray::open(&app);
 }
 
+#[tauri::command]
+fn updater_supported() -> bool {
+    cfg!(target_os = "windows")
+}
+
+#[tauri::command]
+fn restart_after_update(app: tauri::AppHandle) {
+    app.restart();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(SchedulerState(Mutex::new(Runtime::default())))
         .invoke_handler(tauri::generate_handler![
             audio::play_bell,
@@ -26,6 +36,8 @@ pub fn run() {
             publication::begin_publication_request,
             publication::commit_publication,
             show_main_window,
+            updater_supported,
+            restart_after_update,
             settings::get_settings,
             settings::set_setting
         ])
@@ -41,7 +53,11 @@ pub fn run() {
                     let _ = window.hide();
                 }
             }
-        })
+        });
+    #[cfg(target_os = "windows")]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
+    builder
         .setup(|app| {
             let settings_path = app.path().app_data_dir()?.join("settings.json");
             let settings = settings::read(&settings_path).unwrap_or_else(|error| {

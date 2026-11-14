@@ -20,9 +20,9 @@ Native փաթեթավորումը գործարկեք համապատասխան OS
 | macOS | `npm run tauri build -- --bundles app,dmg` |
 | Ubuntu/Xubuntu | `npm run tauri build -- --bundles deb,appimage` |
 
-Սովորական push/PR-ի համար GitHub Actions չի գործարկվում։ `vX.Y.Z` tag-ի push-ից [Windows release](.github/workflows/release.yml)-ը `windows-latest` runner-ում կատարում է ստուգումները, կառուցում միայն NSIS installer և կցում GitHub Release-ին։ Ռելիզից առաջ տեղային գործարկել `npm run check:release-version -- vX.Y.Z` և համոզվել, որ tag-ի տարբերակը համընկնում է `package.json`-ի ու `src-tauri/tauri.conf.json`-ի տարբերակներին։ CI-ն չի փորձում headless runner-ում հաստատել toast, tray, audio կամ speech վարքը։
+Սովորական push/PR-ի [checks workflow](.github/workflows/checks.yml)-ը ստուգում է Windows/macOS/Ubuntu մատրիցան։ `vX.Y.Z` tag-ի push-ից [release workflow](.github/workflows/release.yml)-ը կառուցում և հրապարակում է միայն Windows installer/updater-ը։ Այն պահանջում է GitHub Actions `TAURI_SIGNING_PRIVATE_KEY` secret։ Ռելիզից առաջ տեղային գործարկել `npm run check:release-version -- vX.Y.Z` և համոզվել, որ tag-ի տարբերակը համընկնում է `package.json`-ի ու `src-tauri/tauri.conf.json`-ի տարբերակներին։ CI-ն չի փորձում headless runner-ում հաստատել toast, tray, audio կամ speech վարքը։
 
-Ռելիզից առաջ տեղային ստուգել `npm run check:release-version -- vX.Y.Z` հրամանը։ Այն պետք է հաջողվի միայն այն դեպքում, երբ tag-ի տարբերակը համընկնում է և՛ `package.json`-ի, և՛ `src-tauri/tauri.conf.json`-ի տարբերակներին։ Tag-ի push-ից հետո ստուգել, որ `Windows release` workflow-ը հաջող է, GitHub Release-ը ստեղծվել է, իսկ կցված NSIS installer-ը ներբեռնվում և տեղադրվում է Windows-ում։
+Ռելիզից առաջ տեղային ստուգել `npm run check:release-version -- vX.Y.Z` հրամանը։ Tag-ի push-ից հետո ստուգել, որ Windows release job-ը հաջող է, GitHub Release-ի `latest.json`-ը պարունակում է Windows updater URL/signature զույգը, իսկ NSIS installer-ը ներբեռնվում և տեղադրվում է Windows-ում։
 
 TypeScript թեստերը ծածկում են validation/cache/timeout, current-next summary և speech-ի բացակայությունը։ Rust թեստերը՝ scheduler-ի նախազգուշացում, ավարտի հատում, հաջորդ դաս, կրկնությունների կանխում, sleep/wake/կեսգիշեր, JSON persistence և sound-disabled վարք։ Bundled PCM ֆորմատն ու audio sample-ները ստուգվում են առանց ֆիզիկական audio device-ի։
 
@@ -68,6 +68,8 @@ OS/version/architecture, build revision և ամսաթիվ՝ **չստուգված
 - [ ] Speech՝ WebView2, հայերեն voice-ի առկայությամբ և առանց դրա, speech-disabled և ընթացիկ խոսքի cancellation։
 - [ ] Notifications-disabled՝ նոր native notification, զանգ և խոսք չեն գործարկվում։
 - [ ] Ընդհանուր functional checklist-ը կատարված է։
+- [ ] Updater չունեցող հին build-ից տեղադրել առաջին updater-ով release-ը ձեռքով։ Դրանից հետո նոր signed release հրապարակել և հաստատել, որ startup-ից մոտ 5 վայրկյան անց update-ը ինքնաբերաբար ներբեռնվում, տեղադրվում և restart է անում։ Ստուգել նաև վերջին տարբերակի, network/signature failure-ի և download progress-ի վարքը։
+- [ ] Թարմացումը կիրառվում է current-user NSIS installer-ի միջոցով՝ առանց administrator իրավունքի, և պահպանվում են application-data settings/cache ֆայլերը։
 
 ## macOS manual checklist
 
@@ -84,6 +86,7 @@ OS/version/architecture, build revision և ամսաթիվ՝ **չստուգված
 - [ ] Speech՝ WKWebView, հայերեն voice-ի առկայությամբ և առանց դրա, hidden window և cancellation։
 - [ ] Notifications-disabled՝ բոլոր նոր ազդանշաններն անջատված են։
 - [ ] Ընդհանուր functional checklist-ը կատարված է։
+- [ ] macOS-ում ներհավելվածային update check կամ updater download չի կատարվում։ Թարմացնել նոր `.dmg`-ով, ստուգել settings/cache ֆայլերի պահպանումը։ Տարածման build-ի ստորագրումն ու notarization-ը ստուգել առանձին։
 
 ## Linux — Ubuntu/Xubuntu manual checklist
 
@@ -101,6 +104,7 @@ Distro/version, desktop session (GNOME/XFCE), X11/Wayland, architecture, revisio
 - [ ] Speech՝ WebKitGTK API/voice availability։ Հայերեն voice-ի բացակայության դեպքում crash չկա։ Առկայության դեպքում՝ hidden window և cancellation։
 - [ ] Notifications-disabled՝ նոր notification, զանգ և խոսք չեն գործարկվում։
 - [ ] Ընդհանուր functional checklist-ը կատարված է։
+- [ ] Linux-ում ներհավելվածային update check կամ updater download չի կատարվում։ Ստուգել նոր AppImage/`.deb` փաթեթի ձեռքով տեղադրումը և settings/cache ֆայլերի պահպանումը։
 
 ## Փաստացի ստուգումների սահմանները
 

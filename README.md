@@ -15,6 +15,8 @@ Windows, macOS և Linux (Ubuntu/Xubuntu family) հարթակների փոքր de
 - Native system notification-ներ դասից մեկ րոպե առաջ և ավարտից հետո։
 - Անջատվող bundled զանգ և optional հայերեն/անգլերեն text-to-speech։
 - Պահպանվող կարգավորումներ, OS autostart և թաքնված մեկնարկ tray-ում։
+- Windows-ում startup-ից 5 վայրկյան անց ավտոմատ ստուգում և առկա թարմացման ստորագրված ներբեռնում/տեղադրում՝ ինքնավերագործարկմամբ։
+- Նոր տարբերակի ձեռքով ստուգում և ստորագրված ներհավելվածային տեղադրում՝ Windows-ում, macOS-ում և Linux AppImage փաթեթում։
 - Փակման կոճակը թաքցնում է պատուհանը․ ծրագիրը ամբողջությամբ փակվում է tray-ի «Ելք» գործողությամբ։
 
 ## Տվյալներ և validation
@@ -138,25 +140,21 @@ npm run tauri build
 
 Արդյունքները՝ `src-tauri/target/release/bundle/`։ Սովորական branch push-երի և pull request-ների համար GitHub Actions չի գործարկվում։ macOS/Linux build-երը կատարվում են ձեռքով համապատասխան միջավայրերում։
 
-### Windows release
+### Release և հավելվածի թարմացում
 
-Պաշտոնական Windows ռելիզ ստեղծելու համար՝
+Պաշտոնական ռելիզ ստեղծելու համար՝
 
 1. `package.json` և `src-tauri/tauri.conf.json` ֆայլերում սահմանել նույն `x.y.z` տարբերակը։
 2. Փոփոխությունները միացնել հիմնական branch-ին։
 3. Ստեղծել և ուղարկել նույն տարբերակի tag-ը, օրինակ՝ `git tag v0.1.0`, ապա `git push origin v0.1.0`։
 
-[`Windows release`](.github/workflows/release.yml) workflow-ը գործարկվում է միայն `vX.Y.Z` tag-ի push-ից։ Այն ստուգում է tag-ի և երկու config-ների տարբերակների համընկնումը, անցկացնում է ավտոմատ ստուգումները, կառուցում NSIS `-setup.exe` installer և ստեղծում GitHub Release՝ ավտոմատ release notes-ով։ NSIS-ը բացահայտ կարգավորված է `currentUser` ռեժիմով․ հավելվածը տեղադրվում է տվյալ օգտատիրոջ `%LOCALAPPDATA%` պանակում և administrator իրավունք չի պահանջում։ MSI չի կառուցվում և սովորական push-ից workflow չի գործարկվում։
+[`Windows release`](.github/workflows/release.yml) workflow-ը գործարկվում է միայն `vX.Y.Z` tag-ի push-ից և միայն Windows runner-ում է կառուցում ու հրապարակում ռելիզ։ Այն ստուգում է tag-ի և երկու config-ների տարբերակների համընկնումը, կառուցում ստորագրված updater փաթեթը, NSIS installer-ը և `latest.json` manifest-ը։ Առանձին [`Student checks`](.github/workflows/checks.yml) workflow-ն Windows/macOS/Linux CI մատրիցայով կատարում է թեստերն ու compile ստուգումները՝ առանց release installer-ներ հրապարակելու։ NSIS-ը `currentUser` ռեժիմով է․ տեղադրումը administrator իրավունք չի պահանջում։ GitHub repository-ի Actions secrets-ում պետք է ավելացնել `TAURI_SIGNING_PRIVATE_KEY` անունով secret՝ updater signing private key-ի ամբողջ պարունակությամբ։ Բանալին պահեք գաղտնաբառերի կառավարիչում․ repository-ում չպահեք։
 
-### GitHub Release
+Windows-ում հավելվածի startup-ից 5 վայրկյան անց ստուգվում է վերջին GitHub Release-ը։ Եթե նոր տարբերակ կա, Tauri updater-ը ստուգում է ստորագրությունը, ներբեռնում ու տեղադրում այն, ապա հավելվածը վերագործարկվում է՝ առանց օգտվողի հաստատման։ Ստուգման կամ տեղադրման սխալը ցուցադրվում է պատուհանում, իսկ հաջորդ startup-ին ստուգումը կրկնվում է։ macOS-ը և Linux-ը ներհավելվածային updater չեն օգտագործում․ դրանց փաթեթները շարունակում են թարմացվել ձեռքով/համակարգի տարածման եղանակով։
 
-Պաշտոնական Windows ռելիզ ստեղծելու համար՝
+Updater չունեցող արդեն տեղադրված Windows տարբերակը չի կարող ինքն իրեն թարմացնել․ updater-ով առաջին release-ին անցումը պետք է կատարել installer-ով մեկ անգամ։ Հետագա Windows release-ները կտեղադրվեն startup-ի ավտոմատ ստուգմամբ։
 
-1. `package.json` և `src-tauri/tauri.conf.json` ֆայլերում սահմանել նույն `x.y.z` տարբերակը։
-2. Փոփոխությունները միացնել `master`-ին։
-3. Ստեղծել և ուղարկել նույն տարբերակի `vX.Y.Z` tag-ը, օրինակ՝ `git tag v0.1.0`, ապա `git push origin v0.1.0`։
-
-[`Windows release`](.github/workflows/release.yml) workflow-ը ստուգում է tag-ի և երկու config-ների տարբերակների համընկնումը, անցկացնում է ավտոմատ ստուգումները, կառուցում MSI-ն և ստեղծում GitHub Release՝ ավտոմատ release notes-ով։ Չհամընկնող տարբերակների դեպքում հրապարակումը կանգնում է մինչև installer-ի կառուցումը։ Միևնույն tag-ի երկու զուգահեռ գործարկում չի չեղարկում արդեն սկսված ռելիզը։ Ներկայում GitHub Release-ին կցվում է միայն Windows MSI-ն. macOS/Linux փաթեթների հրապարակումը դեռ առանձին աշխատանք է։
+`scripts/create-updater-manifest.mjs`-ը Windows release asset-ից կազմում է `latest.json`-ը և կցում ստորագրության բովանդակությունը։ Պահեք հին release assets-ը, քանի որ հավելվածը ստուգում է `releases/latest/download/latest.json` հասցեն։ Release signing key-ի կորուստը խափանում է հետագա թարմացումների ստորագրումը․ ստեղծեք նոր բանալի միայն գիտակցված key rotation-ի և հավելվածի նոր տարբերակ հրապարակելու դեպքում։
 
 ## Հարթակների վարք և զարգացման կանոն
 

@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   release:
-    name: Build and publish NSIS installer
+    name: Build and publish Windows release
     runs-on: windows-latest
     env:
       VITE_SUPABASE_URL: ${{ vars.STUDENT_SUPABASE_URL }}
@@ -43,14 +43,18 @@ jobs:
       - run: cargo test --manifest-path src-tauri/Cargo.toml --lib --locked
       - run: cargo check --manifest-path src-tauri/Cargo.toml --locked
 
-      - name: Build NSIS installer
+      - name: Build signed NSIS installer and updater package
         run: npm run tauri build -- --bundles nsis
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
-      - name: Publish GitHub Release
+      - name: Create Windows updater manifest
+        run: node scripts/create-updater-manifest.mjs "${{ github.ref_name }}" src-tauri/target/release/bundle/nsis
+
+      - name: Publish Windows GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Horarium Classium ${{ github.ref_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true
-          files: src-tauri/target/release/bundle/nsis/*-setup.exe
-
+          files: src-tauri/target/release/bundle/nsis/*

@@ -31,6 +31,9 @@ rodio = { version = "0.21.1", default-features = false, features = ["playback"] 
 tauri-plugin-notification = "2.4.0"
 tauri-plugin-autostart = "2.5.1"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+tauri-plugin-updater = "=2.12.0"
+
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
