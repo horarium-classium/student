@@ -42,11 +42,3 @@ export function lessonProgress(lesson: Lesson, now: Date, timezone: string): num
   const interval = lessonInterval(lesson, now, timezone);
   return interval && +now >= interval.start && +now < interval.end ? (+now - interval.start) / (interval.end - interval.start) * 100 : undefined;
 }
-export function schoolSummary(lessons: Lesson[], now: Date, timezone: string): string {
-  const valid = lessons.map(lesson => ({ lesson, interval: lessonInterval(lesson, now, timezone) })).filter(item => item.interval);
-  if (!valid.length) return "Այսօր դասեր չկան։";
-  const current = valid.find(({ interval }) => +now >= interval!.start && +now < interval!.end);
-  if (current) return `Հիմա՝ ${current.lesson.lesson} · մինչև ${current.lesson.end}`;
-  const next = valid.filter(({ interval }) => interval!.start > +now).sort((a, b) => a.interval!.start - b.interval!.start)[0];
-  return next ? `Հաջորդ դասը՝ ${next.lesson.lesson} — ${next.lesson.start}` : "";
-}
