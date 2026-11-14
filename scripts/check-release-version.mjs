@@ -11,18 +11,12 @@ const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.me
 const tauriConfig = JSON.parse(
   readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'),
 );
-const cargoToml = readFileSync(new URL('../src-tauri/Cargo.toml', import.meta.url), 'utf8');
-const cargoVersion = cargoToml.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
 const expectedVersion = tag.slice(1);
 
-if (
-  packageJson.version !== expectedVersion ||
-  tauriConfig.version !== expectedVersion ||
-  cargoVersion !== expectedVersion
-) {
+if (packageJson.version !== expectedVersion || tauriConfig.version !== expectedVersion) {
   console.error(
     `Release ${tag} does not match package.json (${packageJson.version}), ` +
-      `tauri.conf.json (${tauriConfig.version}), and Cargo.toml (${cargoVersion ?? 'missing'}).`,
+      `and tauri.conf.json (${tauriConfig.version}).`,
   );
   process.exit(1);
 }

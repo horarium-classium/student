@@ -9,11 +9,11 @@ if (!tag || !/^v\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(tag)) {
 const files = await readdir(directory);
 const releaseUrl = `https://github.com/horarium-classium/student/releases/download/${tag}`;
 const platforms = {};
-const archive = files.find((file) => file.endsWith("-setup.nsis.zip"));
-if (!archive) throw new Error("Missing signed Windows NSIS updater archive.");
-const signature = await readFile(join(directory, `${archive}.sig`), "utf8");
+const installer = files.find((file) => file.endsWith("-setup.exe") && files.includes(`${file}.sig`));
+if (!installer) throw new Error("Missing signed Windows NSIS installer.");
+const signature = await readFile(join(directory, `${installer}.sig`), "utf8");
 platforms["windows-x86_64"] = {
-  url: `${releaseUrl}/${encodeURIComponent(archive)}`,
+  url: `${releaseUrl}/${encodeURIComponent(installer)}`,
   signature: signature.trim(),
 };
 
